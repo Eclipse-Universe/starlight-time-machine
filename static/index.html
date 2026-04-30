@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Starlight Time Machine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <div id="loading-screen">
+    <div class="loading-content">
+      <div class="loading-title">STARLIGHT TIME MACHINE</div>
+      <div class="loading-sub">Every photon has a story</div>
+      <div class="loading-bar"><div class="loading-fill"></div></div>
+    </div>
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <div id="title-block">
+    <h1>STARLIGHT<br>TIME MACHINE</h1>
+    <p>Click any star or planet for detailed information.<br>Named stars show when their light left Earth.</p>
+  </div>
+
+  <div id="hint">Drag to rotate &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Click a star or planet</div>
+
+  <div id="legend">
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#ffe080;box-shadow:0 0 5px #ffe080aa"></div>
+      Solar System
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#9bb0ff"></div>O / B — Blue-white giants
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#cad7ff"></div>A / F — White to yellow-white
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#ffd2a1"></div>G / K — Yellow to orange
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#ff6030"></div>M — Red dwarfs &amp; giants
+    </div>
+  </div>
+
+  <!-- ─── Info Panel ─────────────────────────────────────── -->
+  <div id="star-panel" class="hidden">
+    <button id="close-panel">✕</button>
+
+    <div id="panel-object-name"></div>
+    <div id="panel-object-subtitle"></div>
+
+    <!-- ══ STAR CONTENT ══ -->
+    <div id="star-content" class="hidden">
+
+      <div class="panel-section">
+        <div class="panel-label">DISTANCE</div>
+        <div id="panel-distance"></div>
+      </div>
+
+      <div class="panel-section time-capsule">
+        <div class="panel-label">LIGHT DEPARTED IN</div>
+        <div id="panel-year"></div>
+        <div id="panel-history"></div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-label">🌍 WESTERN WORLD</div>
+        <div id="panel-west" class="history-text"></div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-label">🌏 EASTERN WORLD</div>
+        <div id="panel-east" class="history-text"></div>
+      </div>
+
+      <div id="dead-warning" class="hidden">
+        <span>⚠</span> This star may have already died. You may be looking at a ghost.
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-label">CURRENT STATE</div>
+        <div id="panel-state"></div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-label">ULTIMATE FATE</div>
+        <div id="panel-fate"></div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-label">REMARKABLE FACT</div>
+        <div id="panel-fact"></div>
+      </div>
+
+    </div><!-- /star-content -->
+
+    <!-- ══ PLANET CONTENT ══ -->
+    <div id="planet-content" class="hidden">
+
+      <div class="panel-section">
+        <div class="panel-label">OVERVIEW</div>
+        <div id="planet-overview"></div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-label">KEY STATS</div>
+        <div id="planet-stats" class="stats-grid"></div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-label">NOTABLE FEATURES</div>
+        <ul id="planet-features" class="info-list"></ul>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-label">SPACE MISSIONS</div>
+        <ul id="planet-missions" class="info-list missions"></ul>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-label">REMARKABLE FACT</div>
+        <div id="planet-fact"></div>
+      </div>
+
+    </div><!-- /planet-content -->
+
+  </div><!-- /star-panel -->
+
+  <div id="tooltip"></div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module" src="/static/js/main.js"></script>
+</body>
+</html>
