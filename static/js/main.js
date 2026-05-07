@@ -691,6 +691,17 @@ function showPlanetMode() {
   planetContent.classList.remove('hidden');
 }
 
+// ─── Star field image (CDS Hips2Fits — full-sky DSS2) ─────────────────────────
+function loadStarFieldImage(star) {
+  const wrap = document.getElementById('star-image-wrap');
+  const img  = document.getElementById('star-field-image');
+  wrap.classList.add('hidden');
+  img.onload  = () => wrap.classList.remove('hidden');
+  img.onerror = () => wrap.classList.add('hidden');
+  const fov = star.distance_ly < 100 ? 1.2 : star.distance_ly < 1000 ? 0.6 : 0.35;
+  img.src = `https://aladinlite.cds.unistra.fr/hips2fits/?hips=CDS%2FP%2FDSS2%2Fcolor&ra=${star.ra_deg}&dec=${star.dec_deg}&fov=${fov}&width=370&height=210&projection=TAN&coordsys=icrs&format=jpg`;
+}
+
 // ─── Star panel ───────────────────────────────────────────────────────────────
 function openStarPanel(mesh) {
   selectedStar = mesh;
@@ -713,6 +724,7 @@ function openStarPanel(mesh) {
   const dw = document.getElementById('dead-warning');
   star.possibly_dead ? dw.classList.remove('hidden') : dw.classList.add('hidden');
 
+  loadStarFieldImage(star);
   showStarMode();
   panel.classList.remove('hidden');
 }
@@ -831,6 +843,39 @@ document.getElementById('globe-observe-btn').addEventListener('click', () => {
   startSkyView(selectedLocation);
 });
 document.getElementById('sky-back-btn').addEventListener('click', stopSkyView);
+
+// ─── APOD ─────────────────────────────────────────────────────────────────────
+(async () => {
+  try {
+    const res  = await fetch('/api/apod');
+    const apod = await res.json();
+    if (!apod.url) return; // placeholder — not yet fetched by Actions
+
+    const trigger = document.getElementById('apod-trigger');
+    const overlay = document.getElementById('apod-overlay');
+
+    trigger.addEventListener('click', () => {
+      document.getElementById('apod-date-display').textContent      = apod.date;
+      document.getElementById('apod-title-display').textContent     = apod.title;
+      document.getElementById('apod-explanation-display').textContent = apod.explanation;
+      document.getElementById('apod-copyright-display').textContent =
+        apod.copyright ? `© ${apod.copyright}` : '';
+
+      const imgEl = document.getElementById('apod-image');
+      imgEl.src = apod.hdurl || apod.url;
+      overlay.classList.remove('hidden');
+    });
+
+    document.getElementById('apod-close').addEventListener('click',
+      () => overlay.classList.add('hidden')
+    );
+    overlay.addEventListener('click', e => {
+      if (e.target === overlay) overlay.classList.add('hidden');
+    });
+  } catch {
+    document.getElementById('apod-trigger').style.display = 'none';
+  }
+})();
 
 (async () => {
   // Load planets data

@@ -8,6 +8,7 @@ app = FastAPI()
 
 STARS_PATH   = Path(__file__).parent / "data" / "stars.json"
 PLANETS_PATH = Path(__file__).parent / "data" / "planets.json"
+APOD_PATH    = Path(__file__).parent / "data" / "apod.json"
 
 with open(STARS_PATH) as f:
     STARS = json.load(f)
@@ -23,6 +24,12 @@ def get_stars():
 @app.get("/api/planets")
 def get_planets():
     return PLANETS
+
+
+@app.get("/api/apod")
+def get_apod():
+    with open(APOD_PATH) as f:
+        return json.load(f)
 
 
 app.mount("/static", StaticFiles(directory="static"), name="static")

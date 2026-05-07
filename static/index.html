@@ -25,6 +25,21 @@
     <p>Click any star or planet for detailed information.<br>Named stars show when their light left Earth.</p>
   </div>
 
+  <button id="apod-trigger" title="오늘의 천체사진">🌌</button>
+
+  <!-- ─── APOD Overlay ──────────────────────────────────────── -->
+  <div id="apod-overlay" class="hidden">
+    <div id="apod-content">
+      <button id="apod-close">✕</button>
+      <div class="panel-label">NASA · 오늘의 천체사진</div>
+      <div id="apod-date-display"></div>
+      <div id="apod-title-display"></div>
+      <img id="apod-image" alt="" />
+      <div id="apod-explanation-display"></div>
+      <div id="apod-copyright-display"></div>
+    </div>
+  </div>
+
   <div id="hint">Drag to rotate &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Click a star or planet</div>
 
   <div id="legend">
@@ -55,6 +70,13 @@
 
     <!-- ══ STAR CONTENT ══ -->
     <div id="star-content" class="hidden">
+
+      <div id="star-image-wrap" class="panel-section hidden">
+        <img id="star-field-image" alt="Star field" loading="lazy" />
+        <div class="panel-label" style="margin-top:0.5rem;font-size:0.55rem">
+          실제 망원경 이미지 (DSS2) · CDS/Aladin
+        </div>
+      </div>
 
       <div class="panel-section">
         <div class="panel-label">DISTANCE</div>
