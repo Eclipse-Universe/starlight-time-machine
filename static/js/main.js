@@ -12,7 +12,9 @@ let globePin         = null;
 let selectedLocation = null; // { lat, lon, name }
 
 // ─── Sky View state ───────────────────────────────────────────────────────────
-let ALL_STARS       = [];   // populated in loadNamedStars()
+let ALL_STARS       = [];   // named stars for 3D scene (from /api/stars)
+let BRIGHT_STARS    = [];   // full catalog for sky view (from /api/bright-stars)
+let CONST_LINES     = null; // constellation line segments (from /api/constellations)
 let skyViewActive   = false;
 let skyInterval     = null;
 
@@ -570,13 +572,16 @@ function startSkyView(location) {
   document.getElementById('sky-location-name').textContent = `📍 ${location.name}`;
   overlay.classList.remove('hidden');
 
+  // Use full bright star catalog if loaded, fall back to named stars
+  const stars = BRIGHT_STARS.length > 0 ? BRIGHT_STARS : ALL_STARS;
+
   function refresh() {
-    const now     = new Date();
-    const count   = drawSkyCanvas(canvas, ALL_STARS, location, now);
-    const kstStr  = now.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' });
-    const utcStr  = now.toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: false });
-    document.getElementById('sky-time-display').textContent  = `KST ${kstStr}  ·  UTC ${utcStr}`;
-    document.getElementById('sky-star-count').textContent    = `지평선 위 관측 가능 별: ${count}개`;
+    const now    = new Date();
+    const count  = drawSkyCanvas(canvas, stars, CONST_LINES, location, now);
+    const kstStr = now.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' });
+    const utcStr = now.toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: false });
+    document.getElementById('sky-time-display').textContent = `KST ${kstStr}  ·  UTC ${utcStr}`;
+    document.getElementById('sky-star-count').textContent   = `지평선 위 별: ${count}개 · 행성 5개 표시`;
   }
 
   refresh();
@@ -878,10 +883,15 @@ document.getElementById('sky-back-btn').addEventListener('click', stopSkyView);
 })();
 
 (async () => {
-  // Load planets data
-  const pRes = await fetch('/api/planets');
-  const pArr = await pRes.json();
-  PLANET_DATA = Object.fromEntries(pArr.map(p => [p.id, p]));
+  // Load all data in parallel
+  const [pArr, brightArr, constArr] = await Promise.all([
+    fetch('/api/planets').then(r => r.json()),
+    fetch('/api/bright-stars').then(r => r.json()),
+    fetch('/api/constellations').then(r => r.json()),
+  ]);
+  PLANET_DATA  = Object.fromEntries(pArr.map(p => [p.id, p]));
+  BRIGHT_STARS = brightArr;
+  CONST_LINES  = constArr;
 
   await loadNamedStars();
   animate();

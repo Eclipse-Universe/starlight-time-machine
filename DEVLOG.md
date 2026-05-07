@@ -75,6 +75,21 @@
 - Cloudflare R2 (무료 10GB, 무료 egress): 이미지 및 JSON 캐시 저장
 - Railway 유지: FastAPI 백엔드 서빙
 
+### 2026-05-07 추가 구현 (Phase 5)
+
+**별 카탈로그 확장 + 별자리 선 + 행성 실시간 위치**
+
+- `data/bright_stars.json`: HYG Database v4.1 기반, 등급 5.5 이하 **2,866개** 별 (기존 38개 → 75배 확장)
+  - 명칭 있는 별: 334개 (IAU 공식 명칭 포함)
+- `data/constellations.json`: d3-celestial 기반 IAU 별자리 경계선 150개 세그먼트
+- `skyview.js` 대폭 업그레이드:
+  - 별자리 선 렌더링 (지평선 아래 -15° 이상만 표시)
+  - 행성 5개 실시간 위치 (Jean Meeus 저정밀 궤도 요소 공식, 오차 ~1°)
+  - 수성/금성/화성/목성/토성 개별 색상 + 이름 레이블
+  - 등급별 성능 최적화 (3등급 이상만 glow 렌더링)
+- `app.py`: `/api/bright-stars`, `/api/constellations` 엔드포인트 추가
+- `main.js`: 병렬 데이터 로딩 (`Promise.all`)으로 초기 로딩 속도 개선
+
 ### 구현 Phase 계획
 | Phase | 내용 | 상태 |
 |-------|------|------|
