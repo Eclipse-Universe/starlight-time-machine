@@ -1,5 +1,17 @@
 // Sky view: astronomical calculations + canvas rendering
 
+let _lastVisible = []; // [{star, x, y, alt, az, sz}] — updated each draw
+
+// Returns the nearest star/planet to a canvas click position, or null
+export function getNearestStar(clickX, clickY, threshold = 28) {
+  let best = null, bestDist = threshold;
+  for (const v of _lastVisible) {
+    const d = Math.hypot(v.x - clickX, v.y - clickY);
+    if (d < bestDist) { bestDist = d; best = v; }
+  }
+  return best;
+}
+
 const J2000_JD = 2451545.0;
 const toRad = d => d * Math.PI / 180;
 const toDeg = r => r * 180 / Math.PI;
@@ -218,6 +230,7 @@ export function drawSkyCanvas(canvas, brightStars, constLines, location, now) {
   }
 
   // ── Stars ────────────────────────────────────────────────
+  const visible = []; // stored for click detection
   const namedVisible = [];
   for (const star of brightStars) {
     const { alt, az } = raDecToAltAz(star.ra, star.dec, location.lat, location.lon, now);
@@ -228,7 +241,6 @@ export function drawSkyCanvas(canvas, brightStars, constLines, location, now) {
     const col = starColor(star.type);
     const [rr, gg, bb] = hexToRgb(col);
 
-    // Faint glow for brighter stars
     if (star.mag < 3) {
       const grd = ctx.createRadialGradient(x, y, 0, x, y, sz * 4);
       grd.addColorStop(0, `rgba(${rr},${gg},${bb},0.45)`);
@@ -238,13 +250,15 @@ export function drawSkyCanvas(canvas, brightStars, constLines, location, now) {
       ctx.arc(x, y, sz * 4, 0, Math.PI * 2);
       ctx.fill();
     }
-
     ctx.fillStyle = col;
     ctx.beginPath();
     ctx.arc(x, y, sz, 0, Math.PI * 2);
     ctx.fill();
 
-    if (alt >= 0 && star.name) namedVisible.push({ star, x, y, sz });
+    if (alt >= 0) {
+      visible.push({ star, x, y, alt, az, sz });
+      if (star.name) namedVisible.push({ star, x, y, sz });
+    }
   }
 
   // ── Planets ──────────────────────────────────────────────
@@ -256,29 +270,32 @@ export function drawSkyCanvas(canvas, brightStars, constLines, location, now) {
     const { x, y } = project(alt, az, cx, cy, R);
     const col = PLANET_COLORS[p.name] ?? '#ffffff';
     const [rr, gg, bb] = hexToRgb(col);
+    const sz = 4.5;
 
-    // Planet glow
     const grd = ctx.createRadialGradient(x, y, 0, x, y, 10);
     grd.addColorStop(0, `rgba(${rr},${gg},${bb},0.6)`);
     grd.addColorStop(1, `rgba(${rr},${gg},${bb},0)`);
     ctx.fillStyle = grd;
-    ctx.beginPath();
-    ctx.arc(x, y, 10, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
 
-    // Planet dot (slightly larger than stars)
     ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.arc(x, y, 4.5, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, sz, 0, Math.PI * 2); ctx.fill();
 
-    // Planet label
     ctx.fillStyle = `rgba(${rr},${gg},${bb},0.9)`;
     ctx.font = '600 11px "Space Grotesk"';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.fillText(p.name, x + 7, y);
+
+    if (alt >= 0) {
+      visible.push({
+        star: { name: p.name, ra: p.ra, dec: p.dec, mag: -2, type: 'G', isPlanet: true },
+        x, y, alt, az, sz
+      });
+    }
   }
+
+  // Store for click detection
+  _lastVisible = visible;
 
   // ── Named star labels ────────────────────────────────────
   ctx.font = '11px "Space Grotesk"';

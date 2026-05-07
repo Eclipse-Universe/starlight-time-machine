@@ -175,6 +175,26 @@
     <div id="sky-canvas-wrap">
       <canvas id="sky-canvas"></canvas>
     </div>
+
+    <!-- Star/planet detail panel — slides in from right on click -->
+    <div id="sky-star-panel" class="hidden">
+      <button id="sky-star-close">✕</button>
+      <div id="sky-star-name-display"></div>
+      <div id="sky-star-sub-display"></div>
+      <img id="sky-star-img" alt="" />
+      <div class="panel-label" style="margin-top:0.4rem;font-size:0.53rem">
+        실제 관측 이미지 (DSS2) · CDS/Aladin
+      </div>
+      <div class="panel-section">
+        <div class="panel-label">현재 위치</div>
+        <div id="sky-star-altaz"></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-label">등급 · 분광형</div>
+        <div id="sky-star-details"></div>
+      </div>
+    </div>
+
     <div id="sky-footer">
       <span id="sky-star-count"></span>
       <span class="sky-footer-note">1분마다 자동 갱신 &nbsp;·&nbsp; 북쪽이 위</span>

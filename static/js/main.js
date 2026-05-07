@@ -1,15 +1,20 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { drawSkyCanvas } from '/static/js/skyview.js';
+import { drawSkyCanvas, getNearestStar } from '/static/js/skyview.js';
 
 const CURRENT_YEAR = 2025;
 
 // ─── Globe Mode state ─────────────────────────────────────────────────────────
-const GLOBE_RADIUS   = 28;
-let globeMode        = false;
-let globeEarth       = null;
-let globePin         = null;
-let selectedLocation = null; // { lat, lon, name }
+const GLOBE_RADIUS    = 28;
+let globeMode         = false;
+let globeEarth        = null;
+let globePin          = null;
+let selectedLocation  = null;
+let globeHoverSprite  = null;   // glow sprite that follows cursor
+let globeHighlight    = null;   // bright border mesh for hovered country
+let globeHoverTimer   = null;
+let countryBorderData = new Map(); // id → [[lon,lat][]] rings (for highlight mesh)
+let countryPolygons   = [];        // [{id, rings}] for point-in-polygon
 
 // ─── Sky View state ───────────────────────────────────────────────────────────
 let ALL_STARS       = [];   // named stars for 3D scene (from /api/stars)
@@ -413,6 +418,50 @@ async function loadNamedStars() {
   }
 }
 
+// ─── Country hover helpers ────────────────────────────────────────────────────
+function pointInPolygon2D(lon, lat, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if (((yi > lat) !== (yj > lat)) && (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi))
+      inside = !inside;
+  }
+  return inside;
+}
+
+function findCountryAtLatLon(lat, lon) {
+  for (const { id, rings } of countryPolygons) {
+    for (const ring of rings) {
+      if (pointInPolygon2D(lon, lat, ring)) return id;
+    }
+  }
+  return null;
+}
+
+function setCountryHighlight(id) {
+  if (globeHighlight) {
+    globeEarth.remove(globeHighlight);
+    globeHighlight.geometry.dispose();
+    globeHighlight = null;
+  }
+  if (!id || !countryBorderData.has(id)) return;
+  const pos = [];
+  for (const pts of countryBorderData.get(id)) {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const v0 = geoToVec3(pts[i][0],   pts[i][1],   GLOBE_RADIUS + 0.18);
+      const v1 = geoToVec3(pts[i+1][0], pts[i+1][1], GLOBE_RADIUS + 0.18);
+      pos.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z);
+    }
+  }
+  if (pos.length === 0) return;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  globeHighlight = new THREE.LineSegments(geo,
+    new THREE.LineBasicMaterial({ color: 0x66eeff, opacity: 0.95, transparent: true })
+  );
+  globeEarth.add(globeHighlight);
+}
+
 // ─── Globe Mode functions ─────────────────────────────────────────────────────
 async function enterGlobeMode() {
   globeMode = true;
@@ -441,6 +490,15 @@ async function enterGlobeMode() {
   globeEarth.rotation.y = -Math.PI / 2; // Europe/Africa faces initial camera
   scene.add(globeEarth);
 
+  // Hover glow sprite
+  globeHoverSprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTexture('#66eeff'),
+    blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.75,
+  }));
+  globeHoverSprite.scale.setScalar(5);
+  globeHoverSprite.visible = false;
+  globeEarth.add(globeHoverSprite);
+
   await drawCountryBorders();
 
   animTarget = { pos: new THREE.Vector3(0, 0, 0), dist: 80, type: 'globe' };
@@ -458,39 +516,43 @@ async function drawCountryBorders() {
     const res   = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
     const world = await res.json();
     const { arcs, transform: { scale: [sx, sy], translate: [tx, ty] } } = world;
-    const positions = [];
 
     function walkArc(idx) {
       const rev = idx < 0;
       const raw = arcs[rev ? ~idx : idx];
       let ax = 0, ay = 0;
-      const pts = raw.map(([dx, dy]) => {
-        ax += dx; ay += dy;
-        return { lon: ax * sx + tx, lat: ay * sy + ty };
+      return (rev ? raw.slice().reverse() : raw).map(([dx, dy]) => {
+        ax += rev ? -dx : dx; ay += rev ? -dy : dy;
+        return [ax * sx + tx, ay * sy + ty]; // [lon, lat]
       });
-      return rev ? pts.reverse() : pts;
     }
 
+    const allPos = [];
     for (const geo of world.objects.countries.geometries) {
-      const rings = geo.type === 'Polygon'      ? geo.arcs
-                  : geo.type === 'MultiPolygon' ? geo.arcs.flat()
-                  : [];
-      for (const ring of rings) {
-        const pts = ring.flatMap(walkArc);
+      const rawRings = geo.type === 'Polygon'      ? geo.arcs
+                     : geo.type === 'MultiPolygon' ? geo.arcs.flat()
+                     : [];
+      const decoded = rawRings.map(ring => ring.flatMap(walkArc));
+
+      // Store for point-in-polygon and highlight mesh creation
+      countryBorderData.set(geo.id, decoded);
+      countryPolygons.push({ id: geo.id, rings: decoded });
+
+      // Accumulate all border vertices into one combined mesh
+      for (const pts of decoded) {
         for (let i = 0; i < pts.length - 1; i++) {
-          const v0 = geoToVec3(pts[i].lon,   pts[i].lat,   GLOBE_RADIUS + 0.08);
-          const v1 = geoToVec3(pts[i+1].lon, pts[i+1].lat, GLOBE_RADIUS + 0.08);
-          positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z);
+          const v0 = geoToVec3(pts[i][0],   pts[i][1],   GLOBE_RADIUS + 0.08);
+          const v1 = geoToVec3(pts[i+1][0], pts[i+1][1], GLOBE_RADIUS + 0.08);
+          allPos.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z);
         }
       }
     }
 
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    const borders = new THREE.LineSegments(geo,
-      new THREE.LineBasicMaterial({ color: 0x88aacc, opacity: 0.55, transparent: true })
-    );
-    globeEarth.add(borders); // child of globe → rotates with it
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(allPos, 3));
+    globeEarth.add(new THREE.LineSegments(geo,
+      new THREE.LineBasicMaterial({ color: 0x88aacc, opacity: 0.5, transparent: true })
+    ));
   } catch (err) {
     console.warn('Country borders could not be loaded:', err);
   }
@@ -524,9 +586,14 @@ async function handleGlobeClick(lat, lon) {
       { headers: { 'User-Agent': 'StarlightTimeMachine/1.0' } }
     );
     const data = await r.json();
-    const city    = data.address?.city || data.address?.town || data.address?.county || '';
-    const country = data.address?.country || '';
-    const name    = [city, country].filter(Boolean).join(', ') || `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
+    const addr    = data.address ?? {};
+    const place   = addr.city || addr.town || addr.village || addr.municipality
+                 || addr.county || addr.state_district || addr.state || '';
+    const country = addr.country || '';
+    const name    = (place && country) ? `${place}, ${country}`
+                  : country || place
+                  || data.display_name?.split(',').slice(-2).map(s => s.trim()).join(', ')
+                  || `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
     selectedLocation = { lat, lon, name };
   } catch {
     selectedLocation = { lat, lon, name: `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E` };
@@ -549,6 +616,13 @@ function exitGlobeMode() {
       delete obj.userData._wasVisible;
     }
   });
+
+  // Cleanup hover state
+  clearTimeout(globeHoverTimer);
+  globeHoverSprite  = null; // removed with globeEarth
+  globeHighlight    = null;
+  countryBorderData.clear();
+  countryPolygons   = [];
 
   animTarget = { pos: new THREE.Vector3(0, 0, 0), dist: 82, type: 'sun' };
   animating  = true;
@@ -601,6 +675,32 @@ function stopSkyView() {
   skyInterval   = null;
   skyViewActive = false;
   document.getElementById('sky-view').classList.add('hidden');
+  document.getElementById('sky-star-panel').classList.add('hidden');
+}
+
+// ─── Sky star info panel ──────────────────────────────────────────────────────
+function showSkyStarPanel(star, alt, az) {
+  const panel = document.getElementById('sky-star-panel');
+
+  document.getElementById('sky-star-name-display').textContent =
+    star.name || '무명 별';
+  document.getElementById('sky-star-sub-display').textContent =
+    star.isPlanet ? '태양계 행성' : `분광형 ${star.type || '?'}  ·  ${star.mag}등급`;
+  document.getElementById('sky-star-altaz').textContent =
+    `고도 ${alt.toFixed(1)}°  ·  방위각 ${az.toFixed(1)}°`;
+  document.getElementById('sky-star-details').textContent =
+    star.isPlanet
+      ? `${star.name} — 현재 지평선 위 관측 가능`
+      : `겉보기등급 ${star.mag}  ·  분광형 ${star.type || '?'}`;
+
+  const img = document.getElementById('sky-star-img');
+  img.style.display = 'none';
+  const fov = (star.mag < 1 || star.isPlanet) ? 1.2 : star.mag < 3 ? 0.5 : 0.25;
+  img.src = `https://aladinlite.cds.unistra.fr/hips2fits/?hips=CDS%2FP%2FDSS2%2Fcolor&ra=${star.ra}&dec=${star.dec}&fov=${fov}&width=252&height=160&projection=TAN&coordsys=icrs&format=jpg`;
+  img.onload  = () => { img.style.display = 'block'; };
+  img.onerror = () => { img.style.display = 'none'; };
+
+  panel.classList.remove('hidden');
 }
 
 // ─── Raycasting ───────────────────────────────────────────────────────────────
@@ -619,8 +719,37 @@ function onPointerMove(e) {
   if (globeMode) {
     const hits = globeEarth ? raycaster.intersectObject(globeEarth) : [];
     document.body.style.cursor = hits.length > 0 ? 'crosshair' : 'grab';
-    tooltip.classList.remove('visible');
     hoveredMesh = null;
+
+    if (hits.length > 0 && globeEarth) {
+      const localPt = globeEarth.worldToLocal(hits[0].point.clone());
+      const { lat, lon } = vec3ToGeo(localPt);
+
+      // Move hover glow sprite
+      if (globeHoverSprite) {
+        globeHoverSprite.position.copy(
+          localPt.clone().normalize().multiplyScalar(GLOBE_RADIUS + 0.5)
+        );
+        globeHoverSprite.visible = true;
+      }
+
+      // Show coords in tooltip immediately
+      tooltip.textContent = `${lat.toFixed(1)}°N  ${lon.toFixed(1)}°E`;
+      tooltip.style.left  = (e.clientX + 14) + 'px';
+      tooltip.style.top   = (e.clientY - 10) + 'px';
+      tooltip.classList.add('visible');
+
+      // Debounced country highlight (200 ms)
+      clearTimeout(globeHoverTimer);
+      globeHoverTimer = setTimeout(() => {
+        const id = findCountryAtLatLon(lat, lon);
+        setCountryHighlight(id);
+      }, 200);
+    } else {
+      if (globeHoverSprite) globeHoverSprite.visible = false;
+      clearTimeout(globeHoverTimer);
+      tooltip.classList.remove('visible');
+    }
     return;
   }
 
@@ -856,6 +985,15 @@ document.getElementById('globe-observe-btn').addEventListener('click', () => {
   startSkyView(selectedLocation);
 });
 document.getElementById('sky-back-btn').addEventListener('click', stopSkyView);
+document.getElementById('sky-star-close').addEventListener('click', () => {
+  document.getElementById('sky-star-panel').classList.add('hidden');
+});
+document.getElementById('sky-canvas').addEventListener('click', e => {
+  if (!skyViewActive) return;
+  const rect = e.target.getBoundingClientRect();
+  const hit  = getNearestStar(e.clientX - rect.left, e.clientY - rect.top);
+  if (hit) showSkyStarPanel(hit.star, hit.alt, hit.az);
+});
 
 // ─── APOD ─────────────────────────────────────────────────────────────────────
 (async () => {

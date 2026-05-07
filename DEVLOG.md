@@ -143,3 +143,31 @@
 - 새로운 기능을 기획하거나 구현 방향이 결정되면 이 파일에 날짜별로 기록
 - Phase가 완료되면 해당 항목 상태를 `완료`로 업데이트 후 커밋
 - 서버 재시작 또는 새 세션 시작 시 이 파일을 먼저 읽어 컨텍스트 복구
+
+---
+
+## 2026-05-07 — Phase 7: 국가 hover 하이라이트 + 하늘 별 클릭 이미지
+
+### 변경 사항
+
+**버그 수정**
+- `geoToVec3` / `vec3ToGeo` x 부호 오류 수정: Three.js SphereGeometry UV는 x=-r·cos(φ) (음수)인데 양수로 구현되어 경도가 (180-실제값)으로 계산됨 → 서울(127°E) 클릭 시 이란(54°E) 표시 문제 해결
+- `globeEarth.rotation.y` PI/2 → -PI/2로 조정 (좌표계 일치)
+- Nominatim 응답 파싱 개선: `city/town/village/municipality/county/state_district/state` 순서로 시도, `display_name` 최종 fallback
+
+**국가 hover 기능**
+- `countryBorderData` Map: 국가 ID → 경계선 좌표 목록 저장 (하이라이트 메시 생성용)
+- `countryPolygons` 배열: 점-폴리곤 판별(point-in-polygon) 용
+- `pointInPolygon2D` / `findCountryAtLatLon`: ray-casting 알고리즘으로 커서 위치의 국가 감지
+- `setCountryHighlight(id)`: 해당 국가 경계선을 밝은 청록색(#66eeff)으로 교체
+- 커서 위치에 glow sprite 표시 (즉각적 시각 피드백)
+- 기존 `#tooltip`을 재활용해 좌표 표시
+- 200ms debounce로 hover 감지 성능 최적화
+
+**하늘 별 클릭 → 이미지 패널**
+- `skyview.js`: `_lastVisible` 모듈 변수에 그려진 별/행성 좌표 저장
+- `getNearestStar(x, y, threshold)` export: 클릭 위치에서 가장 가까운 별 반환
+- 행성도 `_lastVisible`에 포함 (클릭 시 행성 정보 표시 가능)
+- `#sky-star-panel`: 우측 슬라이드 패널 (PC) / 하단 시트 (모바일)
+- CDS/Aladin Hips2Fits DSS2 실제 망원경 이미지 동적 로드
+- 별 등급에 따른 FOV 자동 조정 (밝은 별일수록 넓은 시야각)
