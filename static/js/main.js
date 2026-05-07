@@ -18,21 +18,21 @@ let CONST_LINES     = null; // constellation line segments (from /api/constellat
 let skyViewActive   = false;
 let skyInterval     = null;
 
-// Equirectangular ↔ Three.js sphere (consistent with Three.js SphereGeometry UV)
+// Three.js SphereGeometry UV: x = -r·cos(φ)·sin(θ), z = r·sin(φ)·sin(θ)
 function geoToVec3(lon, lat, r = GLOBE_RADIUS) {
   const phi   = (lon + 180) * (Math.PI / 180);
   const theta = (90 - lat)  * (Math.PI / 180);
   return new THREE.Vector3(
-    r * Math.sin(theta) * Math.cos(phi),
-    r * Math.cos(theta),
-    r * Math.sin(theta) * Math.sin(phi)
+    -r * Math.sin(theta) * Math.cos(phi),  // negative — matches Three.js UV
+    r  * Math.cos(theta),
+    r  * Math.sin(theta) * Math.sin(phi)
   );
 }
 
 function vec3ToGeo(point) {
   const n      = point.clone().normalize();
   const lat    = 90 - Math.acos(Math.max(-1, Math.min(1, n.y))) * (180 / Math.PI);
-  const lonRaw = Math.atan2(n.z, n.x) * (180 / Math.PI);
+  const lonRaw = Math.atan2(n.z, -n.x) * (180 / Math.PI);  // negate x — matches Three.js UV
   const lon    = lonRaw - 180;
   return { lat, lon: ((lon + 540) % 360) - 180 };
 }
@@ -438,7 +438,7 @@ async function enterGlobeMode() {
       ? new THREE.MeshBasicMaterial({ map: tex })
       : new THREE.MeshBasicMaterial({ color: 0x1a5c8a })
   );
-  globeEarth.rotation.y = Math.PI / 2; // Europe/Africa faces initial camera
+  globeEarth.rotation.y = -Math.PI / 2; // Europe/Africa faces initial camera
   scene.add(globeEarth);
 
   await drawCountryBorders();
