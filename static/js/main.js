@@ -13,8 +13,13 @@ let selectedLocation  = null;
 let globeHoverSprite  = null;   // glow sprite that follows cursor
 let globeHighlight    = null;   // bright border mesh for hovered country
 let globeHoverTimer   = null;
-let countryBorderData = new Map(); // id → [[lon,lat][]] rings (for highlight mesh)
-let countryPolygons   = [];        // [{id, rings}] for point-in-polygon
+let countryBorderData = new Map();
+let countryPolygons   = [];
+// Globe drag rotation state
+let globeDragging  = false;
+let globeDragLast  = { x: 0, y: 0 };
+let globeVelocity  = { x: 0, y: 0 };
+let globeDragDist  = 0;
 
 // ─── Sky View state ───────────────────────────────────────────────────────────
 let ALL_STARS       = [];   // named stars for 3D scene (from /api/stars)
@@ -465,7 +470,9 @@ function setCountryHighlight(id) {
 // ─── Globe Mode functions ─────────────────────────────────────────────────────
 async function enterGlobeMode() {
   globeMode = true;
-  controls.autoRotate = false;
+  controls.autoRotate  = false;
+  controls.enableRotate = false; // globe mesh rotates instead
+  controls.enablePan    = false;
   panel.classList.add('hidden');
 
   scene.traverse(obj => {
@@ -577,7 +584,7 @@ async function handleGlobeClick(lat, lon) {
 
   const locEl = document.getElementById('globe-location-display');
   const btn   = document.getElementById('globe-observe-btn');
-  locEl.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}° — 확인 중...`;
+  locEl.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}° — looking up...`;
   btn.disabled = true;
 
   try {
@@ -617,16 +624,20 @@ function exitGlobeMode() {
     }
   });
 
-  // Cleanup hover state
+  // Cleanup hover + drag state
   clearTimeout(globeHoverTimer);
-  globeHoverSprite  = null; // removed with globeEarth
+  globeHoverSprite  = null;
   globeHighlight    = null;
   countryBorderData.clear();
   countryPolygons   = [];
+  globeDragging     = false;
+  globeVelocity     = { x: 0, y: 0 };
 
   animTarget = { pos: new THREE.Vector3(0, 0, 0), dist: 82, type: 'sun' };
   animating  = true;
-  controls.autoRotate = true;
+  controls.autoRotate   = true;
+  controls.enableRotate = true;
+  controls.enablePan    = false;
   selectedLocation = null;
 
   document.getElementById('globe-panel').classList.add('hidden');
@@ -663,7 +674,7 @@ function startSkyView(location) {
     const kstStr = now.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' });
     const utcStr = now.toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: false });
     document.getElementById('sky-time-display').textContent = `KST ${kstStr}  ·  UTC ${utcStr}`;
-    document.getElementById('sky-star-count').textContent   = `지평선 위 별: ${count}개 · 행성 5개 표시`;
+    document.getElementById('sky-star-count').textContent   = `Stars visible: ${count}  ·  5 planets tracked`;
   }
 
   refresh();
@@ -678,27 +689,67 @@ function stopSkyView() {
   document.getElementById('sky-star-panel').classList.add('hidden');
 }
 
+// ─── NASA Image Library fetch ─────────────────────────────────────────────────
+async function fetchNASAStarImage(name) {
+  try {
+    const q   = encodeURIComponent(name + ' star');
+    const res = await fetch(
+      `https://images-api.nasa.gov/search?q=${q}&media_type=image&page_size=5`,
+      { headers: { 'User-Agent': 'StarlightTimeMachine/1.0' } }
+    );
+    const data  = await res.json();
+    const items = data?.collection?.items;
+    if (!items?.length) return null;
+    for (const item of items) {
+      const link = item.links?.find(l => l.rel === 'preview' && l.href?.endsWith('.jpg'));
+      if (link) return link.href;
+    }
+  } catch {}
+  return null;
+}
+
 // ─── Sky star info panel ──────────────────────────────────────────────────────
 function showSkyStarPanel(star, alt, az) {
   const panel = document.getElementById('sky-star-panel');
 
   document.getElementById('sky-star-name-display').textContent =
-    star.name || '무명 별';
+    star.name || 'Unnamed Star';
   document.getElementById('sky-star-sub-display').textContent =
-    star.isPlanet ? '태양계 행성' : `분광형 ${star.type || '?'}  ·  ${star.mag}등급`;
+    star.isPlanet
+      ? 'Solar System Planet'
+      : `Spectral type ${star.type || '?'}  ·  Magnitude ${star.mag}`;
   document.getElementById('sky-star-altaz').textContent =
-    `고도 ${alt.toFixed(1)}°  ·  방위각 ${az.toFixed(1)}°`;
+    `Altitude ${alt.toFixed(1)}°  ·  Azimuth ${az.toFixed(1)}°`;
   document.getElementById('sky-star-details').textContent =
     star.isPlanet
-      ? `${star.name} — 현재 지평선 위 관측 가능`
-      : `겉보기등급 ${star.mag}  ·  분광형 ${star.type || '?'}`;
+      ? `${star.name} — currently visible above the horizon`
+      : `Apparent magnitude ${star.mag}  ·  Spectral class ${star.type || '?'}`;
 
-  const img = document.getElementById('sky-star-img');
-  img.style.display = 'none';
+  // DSS2 field view (always shown)
+  const dssImg = document.getElementById('sky-star-img');
+  dssImg.style.display = 'none';
   const fov = (star.mag < 1 || star.isPlanet) ? 1.2 : star.mag < 3 ? 0.5 : 0.25;
-  img.src = `https://aladinlite.cds.unistra.fr/hips2fits/?hips=CDS%2FP%2FDSS2%2Fcolor&ra=${star.ra}&dec=${star.dec}&fov=${fov}&width=252&height=160&projection=TAN&coordsys=icrs&format=jpg`;
-  img.onload  = () => { img.style.display = 'block'; };
-  img.onerror = () => { img.style.display = 'none'; };
+  dssImg.src = `https://aladinlite.cds.unistra.fr/hips2fits/?hips=CDS%2FP%2FDSS2%2Fcolor&ra=${star.ra}&dec=${star.dec}&fov=${fov}&width=252&height=160&projection=TAN&coordsys=icrs&format=jpg`;
+  dssImg.onload  = () => { dssImg.style.display = 'block'; };
+  dssImg.onerror = () => { dssImg.style.display = 'none'; };
+
+  // NASA archive image (async, for named stars)
+  const nasaImg   = document.getElementById('sky-star-nasa-img');
+  const nasaLabel = document.getElementById('sky-star-nasa-label');
+  nasaImg.style.display   = 'none';
+  nasaLabel.style.display = 'none';
+  if (star.name && !star.isPlanet) {
+    fetchNASAStarImage(star.name).then(url => {
+      if (url) {
+        nasaImg.src = url;
+        nasaImg.onload  = () => {
+          nasaImg.style.display   = 'block';
+          nasaLabel.style.display = 'block';
+        };
+        nasaImg.onerror = () => {};
+      }
+    });
+  }
 
   panel.classList.remove('hidden');
 }
@@ -717,15 +768,33 @@ function onPointerMove(e) {
   raycaster.setFromCamera(pointer, camera);
 
   if (globeMode) {
+    hoveredMesh = null;
+
+    // ── Globe drag rotation ────────────────────────────────
+    if (globeDragging && globeEarth) {
+      const camDist = camera.position.length();
+      const sens    = (camDist / 80) * 0.007;
+      const dx = (e.clientX - globeDragLast.x) * sens;
+      const dy = (e.clientY - globeDragLast.y) * sens;
+      globeEarth.rotation.y += dx;
+      globeEarth.rotation.x  = Math.max(-1.25, Math.min(1.25,
+        globeEarth.rotation.x + dy));
+      globeVelocity = { x: dx * 0.78, y: dy * 0.78 };
+      globeDragDist += Math.hypot(e.clientX - globeDragLast.x, e.clientY - globeDragLast.y);
+      globeDragLast  = { x: e.clientX, y: e.clientY };
+      document.body.style.cursor = 'grabbing';
+      tooltip.classList.remove('visible');
+      return;
+    }
+
+    // ── Hover effects (no drag) ────────────────────────────
     const hits = globeEarth ? raycaster.intersectObject(globeEarth) : [];
     document.body.style.cursor = hits.length > 0 ? 'crosshair' : 'grab';
-    hoveredMesh = null;
 
     if (hits.length > 0 && globeEarth) {
       const localPt = globeEarth.worldToLocal(hits[0].point.clone());
       const { lat, lon } = vec3ToGeo(localPt);
 
-      // Move hover glow sprite
       if (globeHoverSprite) {
         globeHoverSprite.position.copy(
           localPt.clone().normalize().multiplyScalar(GLOBE_RADIUS + 0.5)
@@ -733,13 +802,11 @@ function onPointerMove(e) {
         globeHoverSprite.visible = true;
       }
 
-      // Show coords in tooltip immediately
       tooltip.textContent = `${lat.toFixed(1)}°N  ${lon.toFixed(1)}°E`;
       tooltip.style.left  = (e.clientX + 14) + 'px';
       tooltip.style.top   = (e.clientY - 10) + 'px';
       tooltip.classList.add('visible');
 
-      // Debounced country highlight (200 ms)
       clearTimeout(globeHoverTimer);
       globeHoverTimer = setTimeout(() => {
         const id = findCountryAtLatLon(lat, lon);
@@ -778,12 +845,15 @@ function onPointerClick(e) {
   raycaster.setFromCamera(pointer, camera);
 
   if (globeMode) {
-    if (!globeEarth) return;
-    const hits = raycaster.intersectObject(globeEarth);
-    if (hits.length > 0) {
-      const localPt = globeEarth.worldToLocal(hits[0].point.clone());
-      const { lat, lon } = vec3ToGeo(localPt);
-      handleGlobeClick(lat, lon);
+    // pointerdown → start drag; actual click handled in onPointerUp
+    if (globeEarth) {
+      const hits = raycaster.intersectObject(globeEarth);
+      if (hits.length > 0) {
+        globeDragging = true;
+        globeDragLast = { x: e.clientX, y: e.clientY };
+        globeVelocity = { x: 0, y: 0 };
+        globeDragDist = 0;
+      }
     }
     return;
   }
@@ -795,9 +865,7 @@ function onPointerClick(e) {
   const obj = hits[0].object;
   controls.autoRotate = false;
 
-  if (obj.userData.planetId === 'earth') {
-    enterGlobeMode();
-  } else if (obj.userData.planetId) {
+  if (obj.userData.planetId) {
     openPlanetPanel(obj.userData.planetId);
     const isSun = obj.userData.planetId === 'sun';
     flyTo(obj.position, isSun ? 55 : 20, isSun ? 'sun' : 'planet');
@@ -810,6 +878,26 @@ function onPointerClick(e) {
 function flyTo(targetPos, distance, type = 'star') {
   animTarget = { pos: targetPos.clone(), dist: distance, type };
   animating  = true;
+}
+
+// ─── Globe pointer-up: click vs drag ─────────────────────────────────────────
+function onPointerUp(e) {
+  if (!globeMode || !globeDragging) return;
+  globeDragging = false;
+
+  // Small movement → treat as a click
+  if (globeDragDist < 5 && globeEarth) {
+    pointer.x = (e.clientX / window.innerWidth)  * 2 - 1;
+    pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    const hits = raycaster.intersectObject(globeEarth);
+    if (hits.length > 0) {
+      const localPt = globeEarth.worldToLocal(hits[0].point.clone());
+      const { lat, lon } = vec3ToGeo(localPt);
+      handleGlobeClick(lat, lon);
+    }
+  }
+  globeDragDist = 0;
 }
 
 // ─── Panel helpers ────────────────────────────────────────────────────────────
@@ -896,6 +984,10 @@ function openPlanetPanel(id) {
 
   document.getElementById('planet-fact').textContent = p.fact;
 
+  // Show "Observe Stars" only for Earth
+  document.getElementById('earth-observe-section')
+    .classList[id === 'earth' ? 'remove' : 'add']('hidden');
+
   showPlanetMode();
   panel.classList.remove('hidden');
 }
@@ -962,6 +1054,19 @@ function updateCamera() {
 function animate() {
   requestAnimationFrame(animate);
   if (skyViewActive) return;
+
+  // Globe spin inertia
+  if (globeMode && globeEarth && !globeDragging) {
+    const vMag = Math.abs(globeVelocity.x) + Math.abs(globeVelocity.y);
+    if (vMag > 0.00008) {
+      globeEarth.rotation.y += globeVelocity.x;
+      globeEarth.rotation.x  = Math.max(-1.25, Math.min(1.25,
+        globeEarth.rotation.x + globeVelocity.y));
+      globeVelocity.x *= 0.93;
+      globeVelocity.y *= 0.93;
+    }
+  }
+
   controls.update();
   updateGlows();
   updateCamera();
@@ -978,7 +1083,12 @@ window.addEventListener('resize', () => {
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 window.addEventListener('pointermove', onPointerMove);
 window.addEventListener('pointerdown', onPointerClick);
+window.addEventListener('pointerup',   onPointerUp);
 
+document.getElementById('earth-observe-btn').addEventListener('click', () => {
+  panel.classList.add('hidden');
+  enterGlobeMode();
+});
 document.getElementById('globe-back-btn').addEventListener('click', exitGlobeMode);
 document.getElementById('globe-observe-btn').addEventListener('click', () => {
   if (!selectedLocation) return;
