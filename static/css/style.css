@@ -188,6 +188,16 @@ canvas#canvas {
 
 #planet-fact { font-size: 0.8rem; color: var(--muted); line-height: 1.8; font-style: italic; }
 
+/* ─── Bottom-sheet drag handle (shared) ─────────────────── */
+.sheet-handle {
+  display: none; /* shown only on mobile via media query */
+  width: 36px; height: 4px;
+  background: rgba(74,158,255,0.28);
+  border-radius: 2px;
+  margin: 0 auto 1.1rem;
+  flex-shrink: 0;
+}
+
 /* ─── Scrollbar ──────────────────────────────────────────── */
 #star-panel::-webkit-scrollbar { width: 3px; }
 #star-panel::-webkit-scrollbar-track { background: transparent; }
@@ -377,3 +387,105 @@ canvas#canvas {
 }
 #sky-star-count { font-size: 0.75rem; color: var(--accent); font-family: var(--font-mono); }
 .sky-footer-note { font-size: 0.7rem; color: var(--muted); letter-spacing: 0.1em; }
+
+/* ═══════════════════════════════════════════════════════════
+   MOBILE  (max-width: 768px)
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* ── Title block ────────────────────────────────────────── */
+  #title-block { top: 1rem; left: 1rem; }
+  #title-block h1 { font-size: 0.72rem; letter-spacing: 0.2em; }
+  #title-block p  { display: none; }
+
+  #legend { display: none; }
+
+  #hint { font-size: 0.62rem; bottom: 1.1rem; }
+
+  #apod-trigger { top: 1rem; right: 1rem; padding: 0.38rem 0.6rem; font-size: 1rem; }
+
+  /* ── Star / Planet panel → Bottom Sheet ────────────────── */
+  #star-panel {
+    top: auto; bottom: 0; right: 0;
+    width: 100%; height: 72vh;
+    border-left: none;
+    border-top: 1px solid rgba(74,158,255,0.14);
+    border-radius: 16px 16px 0 0;
+    padding: 0 1.4rem 2rem;
+    display: flex; flex-direction: column;
+    transform: translateY(0);
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  #star-panel.hidden {
+    display: flex;          /* override generic .hidden { display:none } */
+    transform: translateY(100%);
+    pointer-events: none;
+  }
+  /* Drag handle */
+  #star-panel::before {
+    content: '';
+    display: block;
+    width: 36px; height: 4px;
+    background: rgba(74,158,255,0.28);
+    border-radius: 2px;
+    margin: 0.9rem auto 1rem;
+    flex-shrink: 0;
+  }
+
+  #close-panel {
+    top: 0.7rem; right: 1rem;
+    min-width: 44px; min-height: 44px;
+    display: flex; align-items: center; justify-content: flex-end;
+  }
+
+  #panel-object-name { font-size: 1.25rem; }
+
+  /* ── Globe panel → Bottom Sheet ────────────────────────── */
+  #globe-panel {
+    top: auto; bottom: 0; left: 0;
+    width: 100%; height: auto;
+    max-height: 46vh;
+    border-right: none;
+    border-top: 1px solid rgba(74,158,255,0.14);
+    border-radius: 16px 16px 0 0;
+    padding: 0 1.4rem 2rem;
+  }
+  #globe-panel::before {
+    content: '';
+    display: block;
+    width: 36px; height: 4px;
+    background: rgba(74,158,255,0.28);
+    border-radius: 2px;
+    margin: 0.9rem auto 1rem;
+  }
+  #globe-back-btn {
+    min-height: 44px;
+    display: flex; align-items: center;
+  }
+  #globe-observe-btn { margin-top: 1rem; padding: 0.9rem 1.2rem; }
+
+  /* ── Globe hint ─────────────────────────────────────────── */
+  #globe-hint-overlay { font-size: 0.62rem; bottom: 1rem; }
+
+  /* ── Sky View ───────────────────────────────────────────── */
+  #sky-header { padding: 1rem 1.2rem 0; gap: 0.8rem; }
+  #sky-location-name { font-size: 0.88rem; }
+  #sky-time-display  { font-size: 0.65rem; }
+  #sky-back-btn { min-height: 44px; display: flex; align-items: center; }
+  #sky-canvas-wrap { padding: 0.3rem; }
+  #sky-footer {
+    padding: 0.3rem 1.2rem 1.2rem;
+    flex-direction: column; gap: 0.2rem; align-items: flex-start;
+  }
+  #sky-star-count   { font-size: 0.7rem; }
+  .sky-footer-note  { font-size: 0.62rem; }
+
+  /* ── APOD overlay ───────────────────────────────────────── */
+  #apod-content {
+    width: 96%; max-height: 88vh;
+    padding: 1.2rem 1.1rem 1.5rem;
+    border-radius: 8px;
+  }
+  #apod-title-display { font-size: 1.15rem; }
+  #apod-explanation-display { font-size: 0.78rem; }
+}

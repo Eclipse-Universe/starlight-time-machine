@@ -191,6 +191,11 @@ controls.maxDistance    = 800;
 controls.target.set(0, 0, 0);
 controls.autoRotate      = true;
 controls.autoRotateSpeed = 0.2;
+// Touch: one finger = rotate, two fingers = zoom/pan
+controls.touches = {
+  ONE: THREE.TOUCH.ROTATE,
+  TWO: THREE.TOUCH.DOLLY_PAN,
+};
 
 // ─── Background stars ─────────────────────────────────────────────────────────
 (function createBgStars() {
@@ -563,9 +568,12 @@ function exitGlobeMode() {
 function startSkyView(location) {
   skyViewActive = true;
 
-  const overlay = document.getElementById('sky-view');
-  const canvas  = document.getElementById('sky-canvas');
-  const size    = Math.floor(Math.min(window.innerWidth * 0.86, window.innerHeight * 0.76, 680));
+  const overlay  = document.getElementById('sky-view');
+  const canvas   = document.getElementById('sky-canvas');
+  const isMobile = window.innerWidth <= 768;
+  const size     = isMobile
+    ? Math.floor(Math.min(window.innerWidth * 0.96, window.innerHeight * 0.62, 500))
+    : Math.floor(Math.min(window.innerWidth * 0.86, window.innerHeight * 0.76, 680));
   canvas.width  = size;
   canvas.height = size;
 
