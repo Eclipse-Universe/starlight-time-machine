@@ -150,7 +150,10 @@ function project(alt, az, cx, cy, R) {
 }
 
 // ─── Main draw function ───────────────────────────────────────────────────────
-export function drawSkyCanvas(canvas, brightStars, constLines, location, now) {
+export function drawSkyCanvas(canvas, brightStars, constLines, location, now, filters = {}) {
+  const showNamed   = filters.named   !== false;
+  const showUnnamed = filters.unnamed !== false;
+  const showPlanets = filters.planets !== false;
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   const cx = W / 2, cy = H / 2;
@@ -233,6 +236,10 @@ export function drawSkyCanvas(canvas, brightStars, constLines, location, now) {
   const visible = []; // stored for click detection
   const namedVisible = [];
   for (const star of brightStars) {
+    const isNamed = !!star.name;
+    if (!showNamed   && isNamed)  continue;
+    if (!showUnnamed && !isNamed) continue;
+
     const { alt, az } = raDecToAltAz(star.ra, star.dec, location.lat, location.lon, now);
     if (alt < -0.5) continue;
 
@@ -273,7 +280,7 @@ export function drawSkyCanvas(canvas, brightStars, constLines, location, now) {
   }
 
   // ── Planets ──────────────────────────────────────────────
-  const planetData = planetPositions(now);
+  const planetData = showPlanets ? planetPositions(now) : [];
   for (const p of planetData) {
     const { alt, az } = raDecToAltAz(p.ra, p.dec, location.lat, location.lon, now);
     if (alt < -0.5) continue;

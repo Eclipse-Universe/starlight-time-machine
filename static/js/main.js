@@ -22,11 +22,13 @@ let globeVelocity  = { x: 0, y: 0 };
 let globeDragDist  = 0;
 
 // ─── Sky View state ───────────────────────────────────────────────────────────
-let ALL_STARS       = [];   // named stars for 3D scene (from /api/stars)
-let BRIGHT_STARS    = [];   // full catalog for sky view (from /api/bright-stars)
-let CONST_LINES     = null; // constellation line segments (from /api/constellations)
-let skyViewActive   = false;
-let skyInterval     = null;
+let ALL_STARS     = [];
+let BRIGHT_STARS  = [];
+let CONST_LINES   = null;
+let skyViewActive = false;
+let skyInterval   = null;
+let _skyRefresh   = null;   // stored so filters can trigger a redraw
+const skyFilters  = { named: true, planets: true, unnamed: true };
 
 // Three.js SphereGeometry UV: x = -r·cos(φ)·sin(θ), z = r·sin(φ)·sin(θ)
 function geoToVec3(lon, lat, r = GLOBE_RADIUS) {
@@ -670,13 +672,14 @@ function startSkyView(location) {
 
   function refresh() {
     const now    = new Date();
-    const count  = drawSkyCanvas(canvas, stars, CONST_LINES, location, now);
+    const count  = drawSkyCanvas(canvas, stars, CONST_LINES, location, now, skyFilters);
     const kstStr = now.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' });
     const utcStr = now.toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: false });
     document.getElementById('sky-time-display').textContent = `KST ${kstStr}  ·  UTC ${utcStr}`;
-    document.getElementById('sky-star-count').textContent   = `Stars visible: ${count}  ·  5 planets tracked`;
+    document.getElementById('sky-star-count').textContent   = `Visible: ${count} stars`;
   }
 
+  _skyRefresh = refresh;
   refresh();
   skyInterval = setInterval(refresh, 60000);
 }
@@ -745,13 +748,12 @@ function showSkyStarPanel(star, alt, az) {
     document.getElementById('sky-star-details').textContent =
       `Apparent magnitude ${star.mag}  ·  Spectral class ${star.type || '?'}`;
 
-    // FOV: larger for bright stars (their glare covers a bigger field)
-    const fov = star.mag < 0 ? 2.0 : star.mag < 1 ? 1.2 : star.mag < 2 ? 0.6 : 0.3;
+    // FOV: larger for bright stars (bright stars saturate a bigger area)
+    const fov = star.mag < 0 ? 0.5 : star.mag < 1 ? 0.4 : star.mag < 2 ? 0.25 : star.mag < 4 ? 0.15 : 0.1;
     dssImg.onload  = () => { dssImg.style.display = 'block'; };
     dssImg.onerror = () => { dssImg.style.display = 'none'; };
-    dssImg.src = `https://aladinlite.cds.unistra.fr/hips2fits/?hips=CDS%2FP%2FDSS2%2Fcolor` +
-      `&ra=${star.ra}&dec=${star.dec}&fov=${fov}&width=252&height=160` +
-      `&projection=TAN&coordsys=icrs&format=jpg`;
+    // Proxy through our server — avoids browser CORS/referer blocking to STScI
+    dssImg.src = `/api/sky-image?ra=${star.ra}&dec=${star.dec}&fov=${fov}`;
   }
 
   panel.classList.remove('hidden');
@@ -931,8 +933,8 @@ function loadStarFieldImage(star) {
   wrap.classList.add('hidden');
   img.onload  = () => wrap.classList.remove('hidden');
   img.onerror = () => wrap.classList.add('hidden');
-  const fov = star.distance_ly < 100 ? 1.2 : star.distance_ly < 1000 ? 0.6 : 0.35;
-  img.src = `https://aladinlite.cds.unistra.fr/hips2fits/?hips=CDS%2FP%2FDSS2%2Fcolor&ra=${star.ra_deg}&dec=${star.dec_deg}&fov=${fov}&width=370&height=210&projection=TAN&coordsys=icrs&format=jpg`;
+  const fov = star.distance_ly < 100 ? 0.5 : star.distance_ly < 1000 ? 0.25 : 0.15;
+  img.src = `/api/sky-image?ra=${star.ra_deg}&dec=${star.dec_deg}&fov=${fov}`;
 }
 
 // ─── Star panel ───────────────────────────────────────────────────────────────
@@ -1098,6 +1100,14 @@ document.getElementById('globe-observe-btn').addEventListener('click', () => {
   startSkyView(selectedLocation);
 });
 document.getElementById('sky-back-btn').addEventListener('click', stopSkyView);
+document.querySelectorAll('.sky-filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const f = btn.dataset.filter;
+    skyFilters[f] = !skyFilters[f];
+    btn.classList.toggle('active', skyFilters[f]);
+    if (_skyRefresh) _skyRefresh();
+  });
+});
 document.getElementById('sky-star-close').addEventListener('click', () => {
   document.getElementById('sky-star-panel').classList.add('hidden');
 });

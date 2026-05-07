@@ -581,3 +581,28 @@ canvas#canvas {
   background: rgba(74,158,255,0.2);
   border-color: rgba(74,158,255,0.65);
 }
+
+/* ─── Sky view filter buttons ────────────────────────────── */
+#sky-filters {
+  display: flex; gap: 0.35rem; align-items: center;
+  margin-left: auto; flex-shrink: 0;
+}
+.sky-filter-btn {
+  background: rgba(74,158,255,0.06);
+  border: 1px solid rgba(74,158,255,0.18);
+  color: rgba(74,158,255,0.42);
+  font-family: var(--font-mono); font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  padding: 0.28rem 0.55rem; border-radius: 4px;
+  cursor: pointer; transition: all 0.18s; white-space: nowrap;
+}
+.sky-filter-btn.active {
+  background: rgba(74,158,255,0.14);
+  border-color: rgba(74,158,255,0.48);
+  color: var(--accent);
+}
+.sky-filter-btn:hover { border-color: rgba(74,158,255,0.65); }
+
+@media (max-width: 768px) {
+  #sky-filters { display: none; } /* hidden on mobile to save space */
+}
