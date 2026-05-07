@@ -192,3 +192,70 @@ canvas#canvas {
 #star-panel::-webkit-scrollbar { width: 3px; }
 #star-panel::-webkit-scrollbar-track { background: transparent; }
 #star-panel::-webkit-scrollbar-thumb { background: rgba(74,158,255,0.18); border-radius: 2px; }
+
+/* ─── Globe Panel ────────────────────────────────────────── */
+#globe-panel {
+  position: fixed; top: 0; left: 0;
+  width: 300px; height: 100%;
+  background: var(--panel-bg);
+  border-right: 1px solid rgba(74,158,255,0.12);
+  backdrop-filter: blur(16px);
+  padding: 2.5rem 2rem 3rem;
+  z-index: 30;
+  display: flex; flex-direction: column; gap: 1.4rem;
+}
+#globe-panel.hidden { display: none; }
+
+#globe-back-btn {
+  background: none; border: none;
+  color: var(--muted); font-size: 0.78rem;
+  font-family: var(--font); letter-spacing: 0.08em;
+  cursor: pointer; text-align: left; padding: 0;
+  transition: color 0.2s;
+}
+#globe-back-btn:hover { color: var(--text); }
+
+.globe-panel-title {
+  font-size: 1.3rem; font-weight: 600; color: #fff;
+  letter-spacing: -0.01em;
+}
+
+.globe-panel-hint {
+  font-size: 0.78rem; color: var(--muted); line-height: 1.75;
+}
+
+#globe-location-display {
+  font-size: 0.88rem; color: var(--accent);
+  font-family: var(--font-mono); min-height: 2.4em;
+  line-height: 1.6;
+}
+
+#globe-observe-btn {
+  margin-top: auto;
+  background: rgba(74,158,255,0.1);
+  border: 1px solid rgba(74,158,255,0.3);
+  color: var(--accent); font-family: var(--font);
+  font-size: 0.82rem; font-weight: 500;
+  letter-spacing: 0.06em;
+  padding: 0.75rem 1.2rem; border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+#globe-observe-btn:hover:not(:disabled) {
+  background: rgba(74,158,255,0.2);
+  border-color: rgba(74,158,255,0.6);
+}
+#globe-observe-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.phase2-note {
+  display: block; margin-top: 0.4rem;
+  font-size: 0.7rem; color: var(--muted); font-family: var(--font);
+}
+
+#globe-hint-overlay {
+  position: fixed; bottom: 1.8rem; left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.72rem; color: var(--muted); letter-spacing: 0.12em;
+  pointer-events: none; z-index: 10; white-space: nowrap;
+  animation: pulse-hint 3s ease-in-out infinite;
+}

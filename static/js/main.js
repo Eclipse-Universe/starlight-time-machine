@@ -3,6 +3,32 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const CURRENT_YEAR = 2025;
 
+// ─── Globe Mode state ─────────────────────────────────────────────────────────
+const GLOBE_RADIUS   = 28;
+let globeMode        = false;
+let globeEarth       = null;
+let globePin         = null;
+let selectedLocation = null; // { lat, lon, name }
+
+// Equirectangular ↔ Three.js sphere (consistent with Three.js SphereGeometry UV)
+function geoToVec3(lon, lat, r = GLOBE_RADIUS) {
+  const phi   = (lon + 180) * (Math.PI / 180);
+  const theta = (90 - lat)  * (Math.PI / 180);
+  return new THREE.Vector3(
+    r * Math.sin(theta) * Math.cos(phi),
+    r * Math.cos(theta),
+    r * Math.sin(theta) * Math.sin(phi)
+  );
+}
+
+function vec3ToGeo(point) {
+  const n      = point.clone().normalize();
+  const lat    = 90 - Math.acos(Math.max(-1, Math.min(1, n.y))) * (180 / Math.PI);
+  const lonRaw = Math.atan2(n.z, n.x) * (180 / Math.PI);
+  const lon    = lonRaw - 180;
+  return { lat, lon: ((lon + 540) % 360) - 180 };
+}
+
 // ─── Western historical context ───────────────────────────────────────────────
 function getWestContext(year) {
   if (year >= 2020) return "COVID-19 pandemic paralyzed economies; mRNA vaccines developed in record time; George Floyd's murder sparked global protests; Russia invaded Ukraine in 2022, reshaping European security.";
@@ -373,6 +399,157 @@ async function loadNamedStars() {
   }
 }
 
+// ─── Globe Mode functions ─────────────────────────────────────────────────────
+async function enterGlobeMode() {
+  globeMode = true;
+  controls.autoRotate = false;
+  panel.classList.add('hidden');
+
+  scene.traverse(obj => {
+    if (obj === scene) return;
+    obj.userData._wasVisible = obj.visible;
+    obj.visible = false;
+  });
+
+  const loader = new THREE.TextureLoader();
+  const tex = await new Promise(res =>
+    loader.load(
+      'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r165/examples/textures/planets/earth_atmos_2048.jpg',
+      res, undefined, () => res(null)
+    )
+  );
+  globeEarth = new THREE.Mesh(
+    new THREE.SphereGeometry(GLOBE_RADIUS, 64, 64),
+    tex
+      ? new THREE.MeshBasicMaterial({ map: tex })
+      : new THREE.MeshBasicMaterial({ color: 0x1a5c8a })
+  );
+  globeEarth.rotation.y = Math.PI / 2; // Europe/Africa faces initial camera
+  scene.add(globeEarth);
+
+  await drawCountryBorders();
+
+  animTarget = { pos: new THREE.Vector3(0, 0, 0), dist: 80, type: 'globe' };
+  animating  = true;
+
+  document.getElementById('globe-panel').classList.remove('hidden');
+  document.getElementById('globe-hint-overlay').classList.remove('hidden');
+  document.getElementById('hint').classList.add('hidden');
+  document.getElementById('legend').classList.add('hidden');
+  document.getElementById('title-block').classList.add('hidden');
+}
+
+async function drawCountryBorders() {
+  try {
+    const res   = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+    const world = await res.json();
+    const { arcs, transform: { scale: [sx, sy], translate: [tx, ty] } } = world;
+    const positions = [];
+
+    function walkArc(idx) {
+      const rev = idx < 0;
+      const raw = arcs[rev ? ~idx : idx];
+      let ax = 0, ay = 0;
+      const pts = raw.map(([dx, dy]) => {
+        ax += dx; ay += dy;
+        return { lon: ax * sx + tx, lat: ay * sy + ty };
+      });
+      return rev ? pts.reverse() : pts;
+    }
+
+    for (const geo of world.objects.countries.geometries) {
+      const rings = geo.type === 'Polygon'      ? geo.arcs
+                  : geo.type === 'MultiPolygon' ? geo.arcs.flat()
+                  : [];
+      for (const ring of rings) {
+        const pts = ring.flatMap(walkArc);
+        for (let i = 0; i < pts.length - 1; i++) {
+          const v0 = geoToVec3(pts[i].lon,   pts[i].lat,   GLOBE_RADIUS + 0.08);
+          const v1 = geoToVec3(pts[i+1].lon, pts[i+1].lat, GLOBE_RADIUS + 0.08);
+          positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z);
+        }
+      }
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    const borders = new THREE.LineSegments(geo,
+      new THREE.LineBasicMaterial({ color: 0x88aacc, opacity: 0.55, transparent: true })
+    );
+    globeEarth.add(borders); // child of globe → rotates with it
+  } catch (err) {
+    console.warn('Country borders could not be loaded:', err);
+  }
+}
+
+async function handleGlobeClick(lat, lon) {
+  if (globePin) { globeEarth.remove(globePin); globePin = null; }
+
+  globePin = new THREE.Mesh(
+    new THREE.SphereGeometry(0.42, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xff4444 })
+  );
+  globePin.position.copy(geoToVec3(lon, lat, GLOBE_RADIUS + 0.6));
+
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTexture('#ff4444'),
+    blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.85,
+  }));
+  glow.scale.setScalar(3.8);
+  globePin.add(glow);
+  globeEarth.add(globePin);
+
+  const locEl = document.getElementById('globe-location-display');
+  const btn   = document.getElementById('globe-observe-btn');
+  locEl.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}° — 확인 중...`;
+  btn.disabled = true;
+
+  try {
+    const r    = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=ko,en`,
+      { headers: { 'User-Agent': 'StarlightTimeMachine/1.0' } }
+    );
+    const data = await r.json();
+    const city    = data.address?.city || data.address?.town || data.address?.county || '';
+    const country = data.address?.country || '';
+    const name    = [city, country].filter(Boolean).join(', ') || `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
+    selectedLocation = { lat, lon, name };
+  } catch {
+    selectedLocation = { lat, lon, name: `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E` };
+  }
+
+  locEl.textContent = `📍 ${selectedLocation.name}`;
+  btn.disabled = false;
+}
+
+function exitGlobeMode() {
+  globeMode = false;
+
+  if (globeEarth) { scene.remove(globeEarth); globeEarth = null; }
+  globePin = null;
+
+  scene.traverse(obj => {
+    if (obj === scene) return;
+    if (obj.userData._wasVisible !== undefined) {
+      obj.visible = obj.userData._wasVisible;
+      delete obj.userData._wasVisible;
+    }
+  });
+
+  animTarget = { pos: new THREE.Vector3(0, 0, 0), dist: 82, type: 'sun' };
+  animating  = true;
+  controls.autoRotate = true;
+  selectedLocation = null;
+
+  document.getElementById('globe-panel').classList.add('hidden');
+  document.getElementById('globe-hint-overlay').classList.add('hidden');
+  document.getElementById('hint').classList.remove('hidden');
+  document.getElementById('legend').classList.remove('hidden');
+  document.getElementById('title-block').classList.remove('hidden');
+  document.getElementById('globe-location-display').textContent = '';
+  document.getElementById('globe-observe-btn').disabled = true;
+}
+
 // ─── Raycasting ───────────────────────────────────────────────────────────────
 const raycaster = new THREE.Raycaster();
 const pointer   = new THREE.Vector2();
@@ -385,6 +562,14 @@ function onPointerMove(e) {
   pointer.x = (e.clientX / window.innerWidth)  * 2 - 1;
   pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
+
+  if (globeMode) {
+    const hits = globeEarth ? raycaster.intersectObject(globeEarth) : [];
+    document.body.style.cursor = hits.length > 0 ? 'crosshair' : 'grab';
+    tooltip.classList.remove('visible');
+    hoveredMesh = null;
+    return;
+  }
 
   const allClickable = [...starMeshes, ...planetMeshes];
   const hits = raycaster.intersectObjects(allClickable);
@@ -409,6 +594,18 @@ function onPointerMove(e) {
 
 function onPointerClick(e) {
   raycaster.setFromCamera(pointer, camera);
+
+  if (globeMode) {
+    if (!globeEarth) return;
+    const hits = raycaster.intersectObject(globeEarth);
+    if (hits.length > 0) {
+      const localPt = globeEarth.worldToLocal(hits[0].point.clone());
+      const { lat, lon } = vec3ToGeo(localPt);
+      handleGlobeClick(lat, lon);
+    }
+    return;
+  }
+
   const allClickable = [...starMeshes, ...planetMeshes];
   const hits = raycaster.intersectObjects(allClickable);
   if (hits.length === 0) return;
@@ -416,7 +613,9 @@ function onPointerClick(e) {
   const obj = hits[0].object;
   controls.autoRotate = false;
 
-  if (obj.userData.planetId) {
+  if (obj.userData.planetId === 'earth') {
+    enterGlobeMode();
+  } else if (obj.userData.planetId) {
     openPlanetPanel(obj.userData.planetId);
     const isSun = obj.userData.planetId === 'sun';
     flyTo(obj.position, isSun ? 55 : 20, isSun ? 'sun' : 'planet');
@@ -545,6 +744,10 @@ function updateCamera() {
     camTargetPos.y += dist * 0.6;
     camTargetLook.copy(pos);
 
+  } else if (type === 'globe') {
+    camTargetPos.set(0, 15, dist);
+    camTargetLook.set(0, 0, 0);
+
   } else {
     // Star: stay between Solar System and star but keep at least 40% of
     // the star's distance from origin so we never fly into the Sun.
@@ -580,6 +783,13 @@ window.addEventListener('resize', () => {
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 window.addEventListener('pointermove', onPointerMove);
 window.addEventListener('pointerdown', onPointerClick);
+
+document.getElementById('globe-back-btn').addEventListener('click', exitGlobeMode);
+document.getElementById('globe-observe-btn').addEventListener('click', () => {
+  if (!selectedLocation) return;
+  document.getElementById('globe-location-display').innerHTML =
+    `📍 ${selectedLocation.name}<span class="phase2-note">하늘 관측 기능은 Phase 2에서 구현 예정입니다</span>`;
+});
 
 (async () => {
   // Load planets data

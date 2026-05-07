@@ -78,10 +78,37 @@
 ### 구현 Phase 계획
 | Phase | 내용 | 상태 |
 |-------|------|------|
-| Phase 1 | 지구 클릭 → 3D 지구본 + 국가/도시 선택 UI | 미시작 |
+| Phase 1 | 지구 클릭 → 3D 지구본 + 국가/도시 선택 UI | **완료** (2026-05-07) |
 | Phase 2 | 위치/시간 기반 하늘 계산 + 스테레오그래픽 렌더링 | 미시작 |
 | Phase 3 | NASA/ESA 이미지 연동 + 별 클릭 시 실제 사진 표시 | 미시작 |
 | Phase 4 | GitHub Actions 자동화 + Cloudflare R2 연동 | 미시작 |
+
+### Phase 1 구현 상세 (2026-05-07)
+
+**변경 파일**: `static/index.html`, `static/css/style.css`, `static/js/main.js`
+
+**동작 방식**:
+1. 3D 씬에서 Earth 행성 클릭 → `enterGlobeMode()` 호출
+2. 기존 씬 전체 숨김 (`scene.traverse` + `_wasVisible` 스냅샷)
+3. NASA 텍스처 로드 (`earth_atmos_2048.jpg` via jsdelivr CDN)
+4. Three.js SphereGeometry 위에 텍스처 + 국가 경계선 그리기
+   - 국가 경계 데이터: `world-atlas@2/countries-110m.json` (TopoJSON, CDN)
+   - TopoJSON arc delta-decoding 직접 구현 (외부 라이브러리 없이)
+   - 경계선은 globeEarth의 child로 추가 → 카메라 orbit 시 자동 따라감
+5. 지구본 클릭 → `globeEarth.worldToLocal()` → `vec3ToGeo()` → lat/lon 추출
+6. Nominatim (OpenStreetMap) reverse geocoding API로 국가/도시명 표시
+7. 핀 마커 (빨간 구체 + glow sprite) globeEarth child로 추가
+8. "← 태양계로" 버튼 → `exitGlobeMode()` → 씬 복원 + 카메라 플라이백
+9. "이 위치에서 하늘 보기" 버튼 → Phase 2 stub (안내 메시지 표시)
+
+**좌표계**:
+- `geoToVec3(lon, lat, r)`: Three.js SphereGeometry UV와 일치하는 공식 사용
+- `vec3ToGeo(point)`: worldToLocal 후 적용 → rotation.y 자동 보정됨
+- globeEarth.rotation.y = Math.PI/2 → 초기 뷰에 유럽/아프리카 정면
+
+**추가된 UI 요소**:
+- `#globe-panel`: 왼쪽 슬라이드 패널 (위치 선택, 관측 버튼)
+- `#globe-hint-overlay`: 하단 조작 안내 텍스트
 
 ### 비용 분석 (월 기준)
 | 항목 | 비용 |
