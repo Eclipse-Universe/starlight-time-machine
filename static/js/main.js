@@ -589,18 +589,18 @@ async function handleGlobeClick(lat, lon) {
 
   try {
     const r    = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=ko,en`,
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=en&zoom=8`,
       { headers: { 'User-Agent': 'StarlightTimeMachine/1.0' } }
     );
     const data = await r.json();
     const addr    = data.address ?? {};
-    const place   = addr.city || addr.town || addr.village || addr.municipality
-                 || addr.county || addr.state_district || addr.state || '';
+    // zoom=8 returns state/province level (e.g. Gyeonggi-do, Seoul, California)
+    const region  = addr.state || addr.province || addr.region
+                 || addr.county || addr.city || '';
     const country = addr.country || '';
-    const name    = (place && country) ? `${place}, ${country}`
-                  : country || place
-                  || data.display_name?.split(',').slice(-2).map(s => s.trim()).join(', ')
-                  || `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
+    const name    = (region && country) ? `${region}, ${country}`
+                  : country || region
+                  || `${lat.toFixed(1)}°N, ${lon.toFixed(1)}°E`;
     selectedLocation = { lat, lon, name };
   } catch {
     selectedLocation = { lat, lon, name: `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E` };
@@ -689,66 +689,69 @@ function stopSkyView() {
   document.getElementById('sky-star-panel').classList.add('hidden');
 }
 
-// ─── NASA Image Library fetch ─────────────────────────────────────────────────
-async function fetchNASAStarImage(name) {
-  try {
-    const q   = encodeURIComponent(name + ' star');
-    const res = await fetch(
-      `https://images-api.nasa.gov/search?q=${q}&media_type=image&page_size=5`,
-      { headers: { 'User-Agent': 'StarlightTimeMachine/1.0' } }
-    );
-    const data  = await res.json();
-    const items = data?.collection?.items;
-    if (!items?.length) return null;
-    for (const item of items) {
-      const link = item.links?.find(l => l.rel === 'preview' && l.href?.endsWith('.jpg'));
-      if (link) return link.href;
-    }
-  } catch {}
-  return null;
-}
+// ─── Curated planet images (NASA/ESA stable archives) ────────────────────────
+const PLANET_IMAGES = {
+  Mercury: 'https://images-assets.nasa.gov/image/PIA15160/PIA15160~thumb.jpg',
+  Venus:   'https://images-assets.nasa.gov/image/PIA00104/PIA00104~thumb.jpg',
+  Mars:    'https://images-assets.nasa.gov/image/PIA11162/PIA11162~thumb.jpg',
+  Jupiter: 'https://images-assets.nasa.gov/image/PIA22946/PIA22946~thumb.jpg',
+  Saturn:  'https://images-assets.nasa.gov/image/PIA21046/PIA21046~thumb.jpg',
+};
+
+const PLANET_DESC = {
+  Mercury: 'No atmosphere — surface resembles the Moon. A telescope shows a tiny disk with phases.',
+  Venus:   'Thick cloud cover reflects ~70% of sunlight. Telescope shows a brilliant crescent or gibbous disk.',
+  Mars:    'Rusty red disk with polar ice caps visible. Surface features and dust storms observable.',
+  Jupiter: 'Largest planet — cloud bands and Great Red Spot visible. Four Galilean moons easily seen.',
+  Saturn:  'Iconic ring system clearly visible through any telescope. Titan and other moons observable.',
+};
 
 // ─── Sky star info panel ──────────────────────────────────────────────────────
 function showSkyStarPanel(star, alt, az) {
-  const panel = document.getElementById('sky-star-panel');
+  const panel    = document.getElementById('sky-star-panel');
+  const dssImg   = document.getElementById('sky-star-img');
+  const nasaImg  = document.getElementById('sky-star-nasa-img');
+  const nasaLbl  = document.getElementById('sky-star-nasa-label');
+
+  // Reset images
+  dssImg.style.display  = 'none';
+  nasaImg.style.display = 'none';
+  nasaLbl.style.display = 'none';
+  nasaImg.src = '';
+  dssImg.src  = '';
 
   document.getElementById('sky-star-name-display').textContent =
     star.name || 'Unnamed Star';
-  document.getElementById('sky-star-sub-display').textContent =
-    star.isPlanet
-      ? 'Solar System Planet'
-      : `Spectral type ${star.type || '?'}  ·  Magnitude ${star.mag}`;
   document.getElementById('sky-star-altaz').textContent =
     `Altitude ${alt.toFixed(1)}°  ·  Azimuth ${az.toFixed(1)}°`;
-  document.getElementById('sky-star-details').textContent =
-    star.isPlanet
-      ? `${star.name} — currently visible above the horizon`
-      : `Apparent magnitude ${star.mag}  ·  Spectral class ${star.type || '?'}`;
 
-  // DSS2 field view (always shown)
-  const dssImg = document.getElementById('sky-star-img');
-  dssImg.style.display = 'none';
-  const fov = (star.mag < 1 || star.isPlanet) ? 1.2 : star.mag < 3 ? 0.5 : 0.25;
-  dssImg.src = `https://aladinlite.cds.unistra.fr/hips2fits/?hips=CDS%2FP%2FDSS2%2Fcolor&ra=${star.ra}&dec=${star.dec}&fov=${fov}&width=252&height=160&projection=TAN&coordsys=icrs&format=jpg`;
-  dssImg.onload  = () => { dssImg.style.display = 'block'; };
-  dssImg.onerror = () => { dssImg.style.display = 'none'; };
+  if (star.isPlanet) {
+    // ── Planet: curated telescope image ──────────────────
+    document.getElementById('sky-star-sub-display').textContent = 'Solar System Planet';
+    document.getElementById('sky-star-details').textContent =
+      PLANET_DESC[star.name] ?? `Currently at altitude ${alt.toFixed(1)}°`;
 
-  // NASA archive image (async, for named stars)
-  const nasaImg   = document.getElementById('sky-star-nasa-img');
-  const nasaLabel = document.getElementById('sky-star-nasa-label');
-  nasaImg.style.display   = 'none';
-  nasaLabel.style.display = 'none';
-  if (star.name && !star.isPlanet) {
-    fetchNASAStarImage(star.name).then(url => {
-      if (url) {
-        nasaImg.src = url;
-        nasaImg.onload  = () => {
-          nasaImg.style.display   = 'block';
-          nasaLabel.style.display = 'block';
-        };
-        nasaImg.onerror = () => {};
-      }
-    });
+    const pUrl = PLANET_IMAGES[star.name];
+    if (pUrl) {
+      nasaLbl.textContent    = `${star.name} · NASA Archive`;
+      nasaImg.onload  = () => { nasaImg.style.display = 'block'; nasaLbl.style.display = 'block'; };
+      nasaImg.onerror = () => {};
+      nasaImg.src = pUrl;
+    }
+  } else {
+    // ── Star: DSS2 photographic sky survey ───────────────
+    document.getElementById('sky-star-sub-display').textContent =
+      `Spectral type ${star.type || '?'}  ·  Magnitude ${star.mag}`;
+    document.getElementById('sky-star-details').textContent =
+      `Apparent magnitude ${star.mag}  ·  Spectral class ${star.type || '?'}`;
+
+    // FOV: larger for bright stars (their glare covers a bigger field)
+    const fov = star.mag < 0 ? 2.0 : star.mag < 1 ? 1.2 : star.mag < 2 ? 0.6 : 0.3;
+    dssImg.onload  = () => { dssImg.style.display = 'block'; };
+    dssImg.onerror = () => { dssImg.style.display = 'none'; };
+    dssImg.src = `https://aladinlite.cds.unistra.fr/hips2fits/?hips=CDS%2FP%2FDSS2%2Fcolor` +
+      `&ra=${star.ra}&dec=${star.dec}&fov=${fov}&width=252&height=160` +
+      `&projection=TAN&coordsys=icrs&format=jpg`;
   }
 
   panel.classList.remove('hidden');

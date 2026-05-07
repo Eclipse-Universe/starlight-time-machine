@@ -255,6 +255,17 @@ export function drawSkyCanvas(canvas, brightStars, constLines, location, now) {
     ctx.arc(x, y, sz, 0, Math.PI * 2);
     ctx.fill();
 
+    // Dashed ring = "click for telescope view" (named OR bright stars)
+    if (alt >= 0 && (star.name || star.mag < 3)) {
+      ctx.strokeStyle = 'rgba(255,220,80,0.38)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 4]);
+      ctx.beginPath();
+      ctx.arc(x, y, sz + 4, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     if (alt >= 0) {
       visible.push({ star, x, y, alt, az, sz });
       if (star.name) namedVisible.push({ star, x, y, sz });
@@ -281,10 +292,19 @@ export function drawSkyCanvas(canvas, brightStars, constLines, location, now) {
     ctx.fillStyle = col;
     ctx.beginPath(); ctx.arc(x, y, sz, 0, Math.PI * 2); ctx.fill();
 
+    // Diamond outline — distinguishes planets from stars
+    const d = 9;
+    ctx.strokeStyle = `rgba(${rr},${gg},${bb},0.65)`;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(x, y - d); ctx.lineTo(x + d, y);
+    ctx.lineTo(x, y + d); ctx.lineTo(x - d, y);
+    ctx.closePath(); ctx.stroke();
+
     ctx.fillStyle = `rgba(${rr},${gg},${bb},0.9)`;
     ctx.font = '600 11px "Space Grotesk"';
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText(p.name, x + 7, y);
+    ctx.fillText(p.name, x + d + 4, y);
 
     if (alt >= 0) {
       visible.push({
