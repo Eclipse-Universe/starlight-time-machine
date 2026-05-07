@@ -141,6 +141,24 @@
 
   <div id="globe-hint-overlay" class="hidden">드래그로 회전 &nbsp;·&nbsp; 클릭으로 위치 선택</div>
 
+  <!-- ─── Sky View Overlay ──────────────────────────────────── -->
+  <div id="sky-view" class="hidden">
+    <div id="sky-header">
+      <button id="sky-back-btn">← 지구본으로</button>
+      <div id="sky-title-group">
+        <div id="sky-location-name"></div>
+        <div id="sky-time-display"></div>
+      </div>
+    </div>
+    <div id="sky-canvas-wrap">
+      <canvas id="sky-canvas"></canvas>
+    </div>
+    <div id="sky-footer">
+      <span id="sky-star-count"></span>
+      <span class="sky-footer-note">1분마다 자동 갱신 &nbsp;·&nbsp; 북쪽이 위</span>
+    </div>
+  </div>
+
   <div id="tooltip"></div>
 
   <script type="importmap">

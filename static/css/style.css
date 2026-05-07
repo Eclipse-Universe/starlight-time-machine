@@ -259,3 +259,48 @@ canvas#canvas {
   pointer-events: none; z-index: 10; white-space: nowrap;
   animation: pulse-hint 3s ease-in-out infinite;
 }
+
+/* ─── Sky View Overlay ───────────────────────────────────── */
+#sky-view {
+  position: fixed; inset: 0;
+  background: rgba(0, 1, 12, 0.97);
+  display: flex; flex-direction: column; align-items: center;
+  z-index: 40;
+}
+#sky-view.hidden { display: none; }
+
+#sky-header {
+  width: 100%; display: flex; align-items: center; gap: 1.5rem;
+  padding: 1.4rem 2rem 0; flex-shrink: 0;
+}
+#sky-back-btn {
+  background: none; border: none;
+  color: var(--muted); font-size: 0.78rem;
+  font-family: var(--font); letter-spacing: 0.08em;
+  cursor: pointer; white-space: nowrap; padding: 0;
+  transition: color 0.2s;
+}
+#sky-back-btn:hover { color: var(--text); }
+
+#sky-title-group { flex: 1; }
+#sky-location-name {
+  font-size: 1rem; font-weight: 600; color: #fff; letter-spacing: -0.01em;
+}
+#sky-time-display {
+  font-size: 0.72rem; color: var(--muted);
+  font-family: var(--font-mono); margin-top: 0.2rem;
+}
+
+#sky-canvas-wrap {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  padding: 0.8rem; min-height: 0;
+}
+#sky-canvas { border-radius: 50%; display: block; }
+
+#sky-footer {
+  width: 100%; padding: 0.6rem 2rem 1.4rem;
+  display: flex; justify-content: space-between; align-items: center;
+  flex-shrink: 0;
+}
+#sky-star-count { font-size: 0.75rem; color: var(--accent); font-family: var(--font-mono); }
+.sky-footer-note { font-size: 0.7rem; color: var(--muted); letter-spacing: 0.1em; }

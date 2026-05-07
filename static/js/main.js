@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { drawSkyCanvas } from '/static/js/skyview.js';
 
 const CURRENT_YEAR = 2025;
 
@@ -9,6 +10,11 @@ let globeMode        = false;
 let globeEarth       = null;
 let globePin         = null;
 let selectedLocation = null; // { lat, lon, name }
+
+// ─── Sky View state ───────────────────────────────────────────────────────────
+let ALL_STARS       = [];   // populated in loadNamedStars()
+let skyViewActive   = false;
+let skyInterval     = null;
 
 // Equirectangular ↔ Three.js sphere (consistent with Three.js SphereGeometry UV)
 function geoToVec3(lon, lat, r = GLOBE_RADIUS) {
@@ -359,6 +365,7 @@ let selectedStar = null;
 async function loadNamedStars() {
   const res   = await fetch('/api/stars');
   const stars = await res.json();
+  ALL_STARS = stars;
 
   for (const star of stars) {
     const pos    = starPosition(star.ra_deg, star.dec_deg, star.distance_ly);
@@ -548,6 +555,39 @@ function exitGlobeMode() {
   document.getElementById('title-block').classList.remove('hidden');
   document.getElementById('globe-location-display').textContent = '';
   document.getElementById('globe-observe-btn').disabled = true;
+}
+
+// ─── Sky View functions ───────────────────────────────────────────────────────
+function startSkyView(location) {
+  skyViewActive = true;
+
+  const overlay = document.getElementById('sky-view');
+  const canvas  = document.getElementById('sky-canvas');
+  const size    = Math.floor(Math.min(window.innerWidth * 0.86, window.innerHeight * 0.76, 680));
+  canvas.width  = size;
+  canvas.height = size;
+
+  document.getElementById('sky-location-name').textContent = `📍 ${location.name}`;
+  overlay.classList.remove('hidden');
+
+  function refresh() {
+    const now     = new Date();
+    const count   = drawSkyCanvas(canvas, ALL_STARS, location, now);
+    const kstStr  = now.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' });
+    const utcStr  = now.toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: false });
+    document.getElementById('sky-time-display').textContent  = `KST ${kstStr}  ·  UTC ${utcStr}`;
+    document.getElementById('sky-star-count').textContent    = `지평선 위 관측 가능 별: ${count}개`;
+  }
+
+  refresh();
+  skyInterval = setInterval(refresh, 60000);
+}
+
+function stopSkyView() {
+  clearInterval(skyInterval);
+  skyInterval   = null;
+  skyViewActive = false;
+  document.getElementById('sky-view').classList.add('hidden');
 }
 
 // ─── Raycasting ───────────────────────────────────────────────────────────────
@@ -767,6 +807,7 @@ function updateCamera() {
 // ─── Render loop ──────────────────────────────────────────────────────────────
 function animate() {
   requestAnimationFrame(animate);
+  if (skyViewActive) return;
   controls.update();
   updateGlows();
   updateCamera();
@@ -787,9 +828,9 @@ window.addEventListener('pointerdown', onPointerClick);
 document.getElementById('globe-back-btn').addEventListener('click', exitGlobeMode);
 document.getElementById('globe-observe-btn').addEventListener('click', () => {
   if (!selectedLocation) return;
-  document.getElementById('globe-location-display').innerHTML =
-    `📍 ${selectedLocation.name}<span class="phase2-note">하늘 관측 기능은 Phase 2에서 구현 예정입니다</span>`;
+  startSkyView(selectedLocation);
 });
+document.getElementById('sky-back-btn').addEventListener('click', stopSkyView);
 
 (async () => {
   // Load planets data
