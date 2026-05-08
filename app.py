@@ -12,6 +12,7 @@ PLANETS_PATH      = Path(__file__).parent / "data" / "planets.json"
 APOD_PATH         = Path(__file__).parent / "data" / "apod.json"
 BRIGHT_STARS_PATH = Path(__file__).parent / "data" / "bright_stars.json"
 CONST_PATH        = Path(__file__).parent / "data" / "constellations.json"
+MESSIER_PATH      = Path(__file__).parent / "data" / "messier.json"
 
 with open(STARS_PATH) as f:
     STARS = json.load(f)
@@ -21,6 +22,8 @@ with open(BRIGHT_STARS_PATH) as f:
     BRIGHT_STARS = json.load(f)
 with open(CONST_PATH) as f:
     CONSTELLATIONS = json.load(f)
+with open(MESSIER_PATH) as f:
+    MESSIER = json.load(f)
 
 
 @app.get("/api/stars")
@@ -47,6 +50,11 @@ def get_bright_stars():
 @app.get("/api/constellations")
 def get_constellations():
     return CONSTELLATIONS
+
+
+@app.get("/api/messier")
+def get_messier():
+    return MESSIER
 
 
 @app.get("/api/sky-image")

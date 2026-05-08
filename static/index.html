@@ -181,6 +181,7 @@
       <div id="sky-filters">
         <button class="sky-filter-btn active" data-filter="named"   title="Named bright stars">⊙ Named</button>
         <button class="sky-filter-btn active" data-filter="planets" title="Solar system planets">◇ Planets</button>
+        <button class="sky-filter-btn active" data-filter="deepsky" title="Messier deep sky objects">✦ Deep Sky</button>
         <button class="sky-filter-btn active" data-filter="unnamed" title="All background stars">· All Stars</button>
       </div>
     </div>
@@ -216,10 +217,38 @@
       </div>
     </div>
 
+    <!-- Deep sky object detail panel -->
+    <div id="sky-dso-panel" class="hidden">
+      <button id="sky-dso-close">✕</button>
+      <div id="sky-dso-name"></div>
+      <div id="sky-dso-sub"></div>
+
+      <!-- NASA archive image -->
+      <img id="sky-dso-nasa-img" alt="" style="display:none" />
+      <div id="sky-dso-nasa-label" class="panel-label" style="display:none;margin-top:0.3rem;font-size:0.53rem">
+        NASA / Hubble Archive
+      </div>
+
+      <!-- DSS2 survey image -->
+      <img id="sky-dso-img" alt="" />
+      <div class="panel-label" style="margin-top:0.3rem;font-size:0.53rem">
+        Real sky survey (DSS2) · STScI
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-label">DESCRIPTION</div>
+        <div id="sky-dso-desc" class="history-text"></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-label">POSITION · MAGNITUDE</div>
+        <div id="sky-dso-details"></div>
+      </div>
+    </div>
+
     <div id="sky-footer">
       <span id="sky-star-count"></span>
       <span class="sky-footer-note">
-        ◇ planet &nbsp;·&nbsp; ⊙ tap for telescope view &nbsp;·&nbsp; North up
+        ◇ planet &nbsp;·&nbsp; ✦ deep sky &nbsp;·&nbsp; ⊙ tap for view &nbsp;·&nbsp; North up
       </span>
     </div>
   </div>

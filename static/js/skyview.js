@@ -1,11 +1,22 @@
 // Sky view: astronomical calculations + canvas rendering
 
-let _lastVisible = []; // [{star, x, y, alt, az, sz}] — updated each draw
+let _lastVisible = [];         // [{star, x, y, alt, az, sz}] — updated each draw
+let _lastVisibleDSO = [];      // [{dso, x, y}] — Messier / deep-sky objects
 
 // Returns the nearest star/planet to a canvas click position, or null
 export function getNearestStar(clickX, clickY, threshold = 28) {
   let best = null, bestDist = threshold;
   for (const v of _lastVisible) {
+    const d = Math.hypot(v.x - clickX, v.y - clickY);
+    if (d < bestDist) { bestDist = d; best = v; }
+  }
+  return best;
+}
+
+// Returns the nearest deep-sky object to a canvas click position, or null
+export function getNearestDSO(clickX, clickY, threshold = 22) {
+  let best = null, bestDist = threshold;
+  for (const v of _lastVisibleDSO) {
     const d = Math.hypot(v.x - clickX, v.y - clickY);
     if (d < bestDist) { bestDist = d; best = v; }
   }
@@ -149,11 +160,60 @@ function project(alt, az, cx, cy, R) {
   };
 }
 
+// ─── DSO (Messier) symbol drawing ────────────────────────────────────────────
+function drawDSOSymbol(ctx, x, y, type, sz) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(80,200,255,0.70)';
+  ctx.fillStyle   = 'rgba(80,200,255,0.12)';
+  ctx.lineWidth   = 1.1;
+  ctx.setLineDash([]);
+
+  if (type === 'gc') {
+    // Globular cluster: solid circle + cross
+    ctx.beginPath();
+    ctx.arc(x, y, sz, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - sz, y); ctx.lineTo(x + sz, y);
+    ctx.moveTo(x, y - sz); ctx.lineTo(x, y + sz);
+    ctx.stroke();
+  } else if (type === 'oc') {
+    // Open cluster: dashed circle
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath();
+    ctx.arc(x, y, sz, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  } else if (type === 'pn') {
+    // Planetary nebula: small filled circle with outer ring
+    ctx.beginPath(); ctx.arc(x, y, sz * 0.45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x, y, sz, 0, Math.PI * 2); ctx.stroke();
+  } else if (type === 's' || type === 'e' || type === 'i') {
+    // Galaxy: tilted ellipse
+    ctx.beginPath();
+    ctx.ellipse(x, y, sz * 1.4, sz * 0.55, Math.PI / 5, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+  } else if (type === 'snr') {
+    // Supernova remnant: four-point diamond
+    ctx.beginPath();
+    ctx.moveTo(x, y - sz); ctx.lineTo(x + sz * 0.6, y);
+    ctx.lineTo(x, y + sz); ctx.lineTo(x - sz * 0.6, y);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else {
+    // sfr / rn / pos / default: square
+    ctx.beginPath();
+    ctx.rect(x - sz, y - sz, sz * 2, sz * 2);
+    ctx.fill(); ctx.stroke();
+  }
+  ctx.restore();
+}
+
 // ─── Main draw function ───────────────────────────────────────────────────────
-export function drawSkyCanvas(canvas, brightStars, constLines, location, now, filters = {}) {
-  const showNamed   = filters.named   !== false;
-  const showUnnamed = filters.unnamed !== false;
-  const showPlanets = filters.planets !== false;
+export function drawSkyCanvas(canvas, brightStars, constLines, location, now, filters = {}, messierObjects = []) {
+  const showNamed   = filters.named    !== false;
+  const showUnnamed = filters.unnamed  !== false;
+  const showPlanets = filters.planets  !== false;
+  const showDeepSky = filters.deepsky  !== false;
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   const cx = W / 2, cy = H / 2;
@@ -321,8 +381,36 @@ export function drawSkyCanvas(canvas, brightStars, constLines, location, now, fi
     }
   }
 
+  // ── Deep Sky Objects (Messier) ───────────────────────────
+  const dsoVisible = [];
+  if (showDeepSky && messierObjects.length) {
+    for (const dso of messierObjects) {
+      const { alt, az } = raDecToAltAz(dso.ra, dso.dec, location.lat, location.lon, now);
+      if (alt < -0.5) continue;
+
+      const { x, y } = project(alt, az, cx, cy, R);
+      const mag = dso.mag ?? 10;
+      const sz = mag < 6 ? 7 : mag < 8 ? 6 : mag < 9 ? 5 : 4;
+
+      drawDSOSymbol(ctx, x, y, dso.type, sz);
+
+      // Label for bright / famous objects
+      if (mag < 7 || dso.pia) {
+        const label = dso.alt ? `${dso.name} · ${dso.alt}` : dso.name;
+        ctx.fillStyle = 'rgba(80,200,255,0.60)';
+        ctx.font = '10px "Space Grotesk"';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, x + sz + 5, y);
+      }
+
+      dsoVisible.push({ dso, x, y, alt, az, sz });
+    }
+  }
+
   // Store for click detection
   _lastVisible = visible;
+  _lastVisibleDSO = dsoVisible;
 
   // ── Named star labels ────────────────────────────────────
   ctx.font = '11px "Space Grotesk"';

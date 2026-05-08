@@ -557,6 +557,69 @@ canvas#canvas {
   #sky-star-panel.hidden { transform: translateY(100%); }
 }
 
+/* ─── Deep Sky Object panel ──────────────────────────────── */
+#sky-dso-panel {
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
+  width: 268px;
+  background: rgba(4,6,20,0.93);
+  border-left: 1px solid rgba(80,200,255,0.15);
+  backdrop-filter: blur(14px);
+  padding: 1.4rem 1.3rem 2rem;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 1rem;
+  z-index: 5;
+  transition: transform 0.3s cubic-bezier(0.16,1,0.3,1);
+  transform: translateX(0);
+}
+#sky-dso-panel.hidden {
+  display: flex;
+  transform: translateX(100%);
+  pointer-events: none;
+}
+#sky-dso-close {
+  align-self: flex-end;
+  background: none; border: none; color: var(--muted);
+  font-size: 1rem; cursor: pointer; font-family: var(--font);
+  transition: color 0.2s; padding: 0;
+  min-width: 44px; min-height: 44px;
+  display: flex; align-items: center; justify-content: flex-end;
+}
+#sky-dso-close:hover { color: var(--text); }
+#sky-dso-name {
+  font-size: 1.2rem; font-weight: 600; color: #fff; letter-spacing: -0.01em;
+}
+#sky-dso-sub {
+  font-size: 0.7rem; color: rgba(80,200,255,0.7); letter-spacing: 0.08em; margin-top: -0.4rem;
+}
+#sky-dso-img {
+  width: 100%; border-radius: 6px;
+  border: 1px solid rgba(80,200,255,0.12);
+}
+#sky-dso-nasa-img {
+  width: 100%; border-radius: 6px;
+  border: 1px solid rgba(80,200,255,0.12);
+}
+#sky-dso-desc { font-size: 0.78rem; color: var(--text); line-height: 1.65; }
+#sky-dso-details {
+  font-size: 0.75rem; color: var(--muted);
+  font-family: var(--font-mono); line-height: 1.6;
+}
+#sky-dso-panel::-webkit-scrollbar { width: 3px; }
+#sky-dso-panel::-webkit-scrollbar-thumb {
+  background: rgba(80,200,255,0.18); border-radius: 2px;
+}
+@media (max-width: 768px) {
+  #sky-dso-panel {
+    top: auto; right: 0; left: 0; bottom: 0;
+    width: 100%; height: 55vh;
+    border-left: none;
+    border-top: 1px solid rgba(80,200,255,0.15);
+    border-radius: 14px 14px 0 0;
+  }
+  #sky-dso-panel.hidden { transform: translateY(100%); }
+}
+
 /* ─── APOD button label ──────────────────────────────────── */
 #apod-trigger { display: flex; align-items: center; gap: 0.35rem; }
 .apod-label {

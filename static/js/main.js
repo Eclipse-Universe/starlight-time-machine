@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { drawSkyCanvas, getNearestStar } from '/static/js/skyview.js';
+import { drawSkyCanvas, getNearestStar, getNearestDSO } from '/static/js/skyview.js';
 
 const CURRENT_YEAR = 2025;
 
@@ -25,10 +25,11 @@ let globeDragDist  = 0;
 let ALL_STARS     = [];
 let BRIGHT_STARS  = [];
 let CONST_LINES   = null;
+let MESSIER       = [];
 let skyViewActive = false;
 let skyInterval   = null;
 let _skyRefresh   = null;   // stored so filters can trigger a redraw
-const skyFilters  = { named: true, planets: true, unnamed: true };
+const skyFilters  = { named: true, planets: true, unnamed: true, deepsky: true };
 
 // Three.js SphereGeometry UV: x = -r·cos(φ)·sin(θ), z = r·sin(φ)·sin(θ)
 function geoToVec3(lon, lat, r = GLOBE_RADIUS) {
@@ -672,7 +673,7 @@ function startSkyView(location) {
 
   function refresh() {
     const now    = new Date();
-    const count  = drawSkyCanvas(canvas, stars, CONST_LINES, location, now, skyFilters);
+    const count  = drawSkyCanvas(canvas, stars, CONST_LINES, location, now, skyFilters, MESSIER);
     const kstStr = now.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' });
     const utcStr = now.toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: false });
     document.getElementById('sky-time-display').textContent = `KST ${kstStr}  ·  UTC ${utcStr}`;
@@ -690,6 +691,7 @@ function stopSkyView() {
   skyViewActive = false;
   document.getElementById('sky-view').classList.add('hidden');
   document.getElementById('sky-star-panel').classList.add('hidden');
+  document.getElementById('sky-dso-panel').classList.add('hidden');
 }
 
 // ─── Curated planet images (NASA/ESA stable archives) ────────────────────────
@@ -711,6 +713,7 @@ const PLANET_DESC = {
 
 // ─── Sky star info panel ──────────────────────────────────────────────────────
 function showSkyStarPanel(star, alt, az) {
+  document.getElementById('sky-dso-panel').classList.add('hidden');
   const panel    = document.getElementById('sky-star-panel');
   const dssImg   = document.getElementById('sky-star-img');
   const nasaImg  = document.getElementById('sky-star-nasa-img');
@@ -754,6 +757,43 @@ function showSkyStarPanel(star, alt, az) {
     dssImg.onerror = () => { dssImg.style.display = 'none'; };
     // Proxy through our server — avoids browser CORS/referer blocking to STScI
     dssImg.src = `/api/sky-image?ra=${star.ra}&dec=${star.dec}&fov=${fov}`;
+  }
+
+  panel.classList.remove('hidden');
+}
+
+function showSkyDSOPanel(dso, alt, az) {
+  const panel    = document.getElementById('sky-dso-panel');
+  const dssImg   = document.getElementById('sky-dso-img');
+  const nasaImg  = document.getElementById('sky-dso-nasa-img');
+  const nasaLbl  = document.getElementById('sky-dso-nasa-label');
+
+  // Reset images
+  dssImg.style.display  = 'none';
+  nasaImg.style.display = 'none';
+  nasaLbl.style.display = 'none';
+  nasaImg.src = '';
+  dssImg.src  = '';
+
+  const displayName = dso.alt ? `${dso.name} — ${dso.alt}` : dso.name;
+  document.getElementById('sky-dso-name').textContent = displayName;
+  document.getElementById('sky-dso-sub').textContent  = dso.typeLabel;
+  document.getElementById('sky-dso-desc').textContent = dso.desc || '';
+  document.getElementById('sky-dso-details').textContent =
+    `Alt ${alt.toFixed(1)}°  ·  Az ${az.toFixed(1)}°  ·  Mag ${dso.mag ?? '?'}`;
+
+  // DSS2 survey image (always available via proxy)
+  dssImg.onload  = () => { dssImg.style.display = 'block'; };
+  dssImg.onerror = () => { dssImg.style.display = 'none'; };
+  dssImg.src = `/api/sky-image?ra=${dso.ra}&dec=${dso.dec}&fov=${dso.fov ?? 0.3}`;
+
+  // NASA/Hubble archive image (for famous objects)
+  if (dso.pia) {
+    const piaUrl = `https://images-assets.nasa.gov/image/${dso.pia}/${dso.pia}~thumb.jpg`;
+    nasaLbl.textContent = `${dso.name} · NASA / Hubble`;
+    nasaImg.onload  = () => { nasaImg.style.display = 'block'; nasaLbl.style.display = 'block'; };
+    nasaImg.onerror = () => {};
+    nasaImg.src = piaUrl;
   }
 
   panel.classList.remove('hidden');
@@ -1114,8 +1154,22 @@ document.getElementById('sky-star-close').addEventListener('click', () => {
 document.getElementById('sky-canvas').addEventListener('click', e => {
   if (!skyViewActive) return;
   const rect = e.target.getBoundingClientRect();
-  const hit  = getNearestStar(e.clientX - rect.left, e.clientY - rect.top);
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+
+  // DSO wins over stars when both are close (DSO symbols are larger)
+  const dsoHit = getNearestDSO(cx, cy);
+  if (dsoHit) {
+    document.getElementById('sky-star-panel').classList.add('hidden');
+    showSkyDSOPanel(dsoHit.dso, dsoHit.alt, dsoHit.az);
+    return;
+  }
+  const hit = getNearestStar(cx, cy);
   if (hit) showSkyStarPanel(hit.star, hit.alt, hit.az);
+});
+
+document.getElementById('sky-dso-close').addEventListener('click', () => {
+  document.getElementById('sky-dso-panel').classList.add('hidden');
 });
 
 // ─── APOD ─────────────────────────────────────────────────────────────────────
@@ -1153,14 +1207,16 @@ document.getElementById('sky-canvas').addEventListener('click', e => {
 
 (async () => {
   // Load all data in parallel
-  const [pArr, brightArr, constArr] = await Promise.all([
+  const [pArr, brightArr, constArr, messierArr] = await Promise.all([
     fetch('/api/planets').then(r => r.json()),
     fetch('/api/bright-stars').then(r => r.json()),
     fetch('/api/constellations').then(r => r.json()),
+    fetch('/api/messier').then(r => r.json()),
   ]);
   PLANET_DATA  = Object.fromEntries(pArr.map(p => [p.id, p]));
   BRIGHT_STARS = brightArr;
   CONST_LINES  = constArr;
+  MESSIER      = messierArr;
 
   await loadNamedStars();
   animate();
