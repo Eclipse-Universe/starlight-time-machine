@@ -211,20 +211,106 @@ canvas#canvas {
   border: 1px solid rgba(74,158,255,0.12);
 }
 
-/* ─── APOD trigger button ────────────────────────────────── */
-#apod-trigger {
+/* ─── Top-right button group ─────────────────────────────── */
+#top-buttons {
   position: fixed; top: 2rem; right: 2rem;
+  display: flex; gap: 0.5rem;
+  z-index: 20;
+}
+#top-buttons button {
   background: rgba(4,6,20,0.7);
   border: 1px solid rgba(74,158,255,0.2);
   border-radius: 8px;
   padding: 0.5rem 0.8rem;
   font-size: 1.1rem; cursor: pointer;
-  z-index: 20; transition: border-color 0.2s, background 0.2s;
+  font-family: var(--font); color: var(--text);
+  transition: border-color 0.2s, background 0.2s;
+  display: flex; align-items: center; gap: 0.3rem;
 }
-#apod-trigger:hover {
+#top-buttons button:hover {
   background: rgba(74,158,255,0.12);
   border-color: rgba(74,158,255,0.5);
 }
+.btn-label, .apod-label {
+  font-size: 0.72rem; letter-spacing: 0.08em;
+  font-weight: 500; color: var(--muted);
+}
+
+/* ─── Events Overlay ─────────────────────────────────────── */
+#events-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,12,0.88);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 50; backdrop-filter: blur(8px);
+}
+#events-overlay.hidden { display: none; }
+#events-content {
+  background: rgba(6,9,30,0.97);
+  border: 1px solid rgba(74,158,255,0.18);
+  border-radius: 14px;
+  width: min(560px, 94vw);
+  max-height: 82vh;
+  padding: 2rem 2rem 1.5rem;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 0.4rem;
+  position: relative;
+}
+#events-content .panel-label {
+  font-size: 0.65rem; letter-spacing: 0.14em; margin-bottom: 1rem;
+}
+#events-content::-webkit-scrollbar { width: 3px; }
+#events-content::-webkit-scrollbar-thumb {
+  background: rgba(74,158,255,0.2); border-radius: 2px;
+}
+#events-close {
+  position: absolute; top: 1.2rem; right: 1.4rem;
+  background: none; border: none; color: var(--muted);
+  font-size: 1rem; cursor: pointer; font-family: var(--font);
+  transition: color 0.2s; min-width: 44px; min-height: 44px;
+  display: flex; align-items: center; justify-content: flex-end;
+}
+#events-close:hover { color: var(--text); }
+
+.event-card {
+  border: 1px solid rgba(74,158,255,0.10);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 0.6rem;
+  transition: border-color 0.2s;
+}
+.event-card:hover { border-color: rgba(74,158,255,0.28); }
+.event-card.past { opacity: 0.42; }
+.event-card.upcoming-soon { border-color: rgba(255,200,80,0.35); }
+.event-header {
+  display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.35rem;
+}
+.event-emoji { font-size: 1.1rem; flex-shrink: 0; }
+.event-name { font-size: 0.95rem; font-weight: 600; color: #fff; }
+.event-date {
+  font-size: 0.68rem; color: var(--accent);
+  font-family: var(--font-mono); margin-left: auto; white-space: nowrap;
+}
+.event-badge {
+  display: inline-block; font-size: 0.6rem; letter-spacing: 0.1em;
+  padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 600;
+  margin-left: 0.4rem; vertical-align: middle;
+}
+.event-badge.meteor   { background: rgba(80,180,255,0.15); color: #60c0ff; border: 1px solid rgba(80,180,255,0.3); }
+.event-badge.eclipse  { background: rgba(255,80,80,0.12);  color: #ff9090; border: 1px solid rgba(255,80,80,0.25); }
+.event-badge.planet   { background: rgba(255,180,80,0.12); color: #ffb840; border: 1px solid rgba(255,180,80,0.25); }
+.event-badge.special  { background: rgba(180,80,255,0.12); color: #cc88ff; border: 1px solid rgba(180,80,255,0.25); }
+.event-desc { font-size: 0.75rem; color: rgba(180,200,230,0.75); line-height: 1.6; }
+.event-visibility {
+  font-size: 0.65rem; color: var(--muted); margin-top: 0.4rem;
+  font-family: var(--font-mono);
+}
+.event-section-header {
+  font-size: 0.6rem; letter-spacing: 0.14em; color: var(--accent);
+  padding: 0.6rem 0 0.3rem; border-bottom: 1px solid rgba(74,158,255,0.1);
+  margin-bottom: 0.3rem;
+}
+
+/* ─── APOD Overlay ───────────────────────────────────────── */
 
 /* ─── APOD Overlay ───────────────────────────────────────── */
 #apod-overlay {
@@ -369,10 +455,42 @@ canvas#canvas {
 #sky-location-name {
   font-size: 1rem; font-weight: 600; color: #fff; letter-spacing: -0.01em;
 }
+#sky-time-row { margin-top: 0.2rem; }
 #sky-time-display {
   font-size: 0.72rem; color: var(--muted);
-  font-family: var(--font-mono); margin-top: 0.2rem;
+  font-family: var(--font-mono);
+  cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem;
+  transition: color 0.2s;
 }
+#sky-time-display:hover { color: var(--text); }
+#sky-time-display.traveling {
+  color: #ffcc44;
+}
+#sky-time-display.traveling::before {
+  content: '⏱';
+  font-size: 0.7rem;
+}
+#sky-time-travel-row {
+  display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem;
+}
+#sky-time-travel-row.hidden { display: none; }
+#sky-time-input {
+  background: rgba(255,200,80,0.08);
+  border: 1px solid rgba(255,200,80,0.3);
+  border-radius: 6px; padding: 0.3rem 0.5rem;
+  color: #ffcc44; font-family: var(--font-mono); font-size: 0.72rem;
+  cursor: pointer;
+}
+#sky-time-input::-webkit-calendar-picker-indicator { filter: invert(0.7) sepia(1) saturate(4) hue-rotate(10deg); }
+#sky-live-btn {
+  background: rgba(74,200,100,0.12);
+  border: 1px solid rgba(74,200,100,0.3);
+  border-radius: 6px; padding: 0.28rem 0.6rem;
+  color: #60dd80; font-family: var(--font); font-size: 0.68rem;
+  cursor: pointer; font-weight: 500; letter-spacing: 0.05em;
+  transition: background 0.2s, border-color 0.2s; white-space: nowrap;
+}
+#sky-live-btn:hover { background: rgba(74,200,100,0.22); }
 
 #sky-canvas-wrap {
   flex: 1; display: flex; align-items: center; justify-content: center;
@@ -402,7 +520,9 @@ canvas#canvas {
 
   #hint { font-size: 0.62rem; bottom: 1.1rem; }
 
-  #apod-trigger { top: 1rem; right: 1rem; padding: 0.38rem 0.6rem; font-size: 1rem; }
+  #top-buttons { top: 1rem; right: 1rem; gap: 0.35rem; }
+  #top-buttons button { padding: 0.38rem 0.6rem; font-size: 1rem; }
+  .btn-label { display: none; }
 
   /* ── Star / Planet panel → Bottom Sheet ────────────────── */
   #star-panel {
@@ -620,8 +740,7 @@ canvas#canvas {
   #sky-dso-panel.hidden { transform: translateY(100%); }
 }
 
-/* ─── APOD button label ──────────────────────────────────── */
-#apod-trigger { display: flex; align-items: center; gap: 0.35rem; }
+/* ─── Button labels ──────────────────────────────────────── */
 .apod-label {
   font-size: 0.68rem; font-weight: 600;
   color: rgba(74,158,255,0.85);

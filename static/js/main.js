@@ -22,14 +22,22 @@ let globeVelocity  = { x: 0, y: 0 };
 let globeDragDist  = 0;
 
 // ─── Sky View state ───────────────────────────────────────────────────────────
-let ALL_STARS     = [];
-let BRIGHT_STARS  = [];
-let CONST_LINES   = null;
-let MESSIER       = [];
-let skyViewActive = false;
-let skyInterval   = null;
-let _skyRefresh   = null;   // stored so filters can trigger a redraw
-const skyFilters  = { named: true, planets: true, unnamed: true, deepsky: true };
+let ALL_STARS       = [];
+let BRIGHT_STARS    = [];
+let CONST_LINES     = null;
+let MESSIER         = [];
+let EVENTS_DATA     = [];
+let skyViewActive   = false;
+let skyInterval     = null;
+let _skyRefresh     = null;   // stored so filters can trigger a redraw
+let skyTimeOverride = null;   // null = live; Date = time-travel frozen
+const skyFilters    = { named: true, planets: true, unnamed: true, deepsky: true };
+
+// datetime-local input needs local ISO format YYYY-MM-DDTHH:MM
+function toDatetimeLocal(d) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 // Three.js SphereGeometry UV: x = -r·cos(φ)·sin(θ), z = r·sin(φ)·sin(θ)
 function geoToVec3(lon, lat, r = GLOBE_RADIUS) {
@@ -672,26 +680,36 @@ function startSkyView(location) {
   const stars = BRIGHT_STARS.length > 0 ? BRIGHT_STARS : ALL_STARS;
 
   function refresh() {
-    const now    = new Date();
+    const now    = skyTimeOverride ?? new Date();
     const count  = drawSkyCanvas(canvas, stars, CONST_LINES, location, now, skyFilters, MESSIER);
-    const kstStr = now.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' });
-    const utcStr = now.toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: false });
-    document.getElementById('sky-time-display').textContent = `KST ${kstStr}  ·  UTC ${utcStr}`;
-    document.getElementById('sky-star-count').textContent   = `Visible: ${count} stars`;
+    const timeEl = document.getElementById('sky-time-display');
+    if (skyTimeOverride) {
+      timeEl.textContent = now.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+      timeEl.classList.add('traveling');
+    } else {
+      const kstStr = now.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' });
+      const utcStr = now.toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: false });
+      timeEl.textContent = `KST ${kstStr}  ·  UTC ${utcStr}`;
+      timeEl.classList.remove('traveling');
+    }
+    document.getElementById('sky-star-count').textContent = `Visible: ${count} stars`;
   }
 
   _skyRefresh = refresh;
   refresh();
-  skyInterval = setInterval(refresh, 60000);
+  skyInterval = setInterval(() => { if (!skyTimeOverride) refresh(); }, 60000);
 }
 
 function stopSkyView() {
   clearInterval(skyInterval);
-  skyInterval   = null;
-  skyViewActive = false;
+  skyInterval     = null;
+  skyViewActive   = false;
+  skyTimeOverride = null;
   document.getElementById('sky-view').classList.add('hidden');
   document.getElementById('sky-star-panel').classList.add('hidden');
   document.getElementById('sky-dso-panel').classList.add('hidden');
+  document.getElementById('sky-time-travel-row').classList.add('hidden');
+  document.getElementById('sky-time-display').classList.remove('traveling');
 }
 
 // ─── Curated planet images (NASA/ESA stable archives) ────────────────────────
@@ -1172,6 +1190,33 @@ document.getElementById('sky-dso-close').addEventListener('click', () => {
   document.getElementById('sky-dso-panel').classList.add('hidden');
 });
 
+// ─── Time Travel ─────────────────────────────────────────────────────────────
+document.getElementById('sky-time-display').addEventListener('click', () => {
+  if (!skyViewActive) return;
+  const row = document.getElementById('sky-time-travel-row');
+  const inp = document.getElementById('sky-time-input');
+  if (row.classList.contains('hidden')) {
+    inp.value = toDatetimeLocal(skyTimeOverride ?? new Date());
+    row.classList.remove('hidden');
+    inp.focus();
+  } else {
+    row.classList.add('hidden');
+  }
+});
+
+document.getElementById('sky-time-input').addEventListener('change', e => {
+  if (!e.target.value) return;
+  skyTimeOverride = new Date(e.target.value);
+  if (_skyRefresh) _skyRefresh();
+});
+
+document.getElementById('sky-live-btn').addEventListener('click', () => {
+  skyTimeOverride = null;
+  document.getElementById('sky-time-travel-row').classList.add('hidden');
+  document.getElementById('sky-time-display').classList.remove('traveling');
+  if (_skyRefresh) _skyRefresh();
+});
+
 // ─── APOD ─────────────────────────────────────────────────────────────────────
 (async () => {
   try {
@@ -1205,18 +1250,117 @@ document.getElementById('sky-dso-close').addEventListener('click', () => {
   }
 })();
 
+// ─── Events ───────────────────────────────────────────────────────────────────
+(async () => {
+  try {
+    EVENTS_DATA = await fetch('/api/events').then(r => r.json());
+  } catch { /* events unavailable — non-critical */ }
+
+  const trigger = document.getElementById('events-trigger');
+  const overlay = document.getElementById('events-overlay');
+  const list    = document.getElementById('events-list');
+
+  trigger.addEventListener('click', () => {
+    if (list.childElementCount === 0) renderEvents(list);
+    overlay.classList.remove('hidden');
+  });
+  document.getElementById('events-close').addEventListener('click',
+    () => overlay.classList.add('hidden')
+  );
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.classList.add('hidden');
+  });
+})();
+
+function renderEvents(container) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const upcoming = EVENTS_DATA.filter(ev => new Date(ev.peak) >= today)
+    .sort((a, b) => new Date(a.peak) - new Date(b.peak));
+  const past = EVENTS_DATA.filter(ev => new Date(ev.peak) < today)
+    .sort((a, b) => new Date(b.peak) - new Date(a.peak));
+
+  function badgeClass(type) {
+    if (type.startsWith('eclipse')) return 'eclipse';
+    if (type === 'meteor')  return 'meteor';
+    if (type === 'planet')  return 'planet';
+    return 'special';
+  }
+  function badgeLabel(type) {
+    if (type === 'meteor')        return 'METEOR SHOWER';
+    if (type === 'eclipse-solar') return 'SOLAR ECLIPSE';
+    if (type === 'eclipse-lunar') return 'LUNAR ECLIPSE';
+    if (type === 'planet')        return 'PLANET EVENT';
+    return 'SPECIAL';
+  }
+  function daysUntil(dateStr) {
+    const d = new Date(dateStr);
+    d.setHours(0,0,0,0);
+    return Math.round((d - today) / 86400000);
+  }
+  function formatDate(dateStr) {
+    return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function makeCard(ev) {
+    const days = daysUntil(ev.peak);
+    const isPast = days < 0;
+    const isSoon = days >= 0 && days <= 30;
+    const card = document.createElement('div');
+    card.className = 'event-card' + (isPast ? ' past' : '') + (isSoon ? ' upcoming-soon' : '');
+
+    const countdown = days === 0 ? '🔴 Today!'
+      : days === 1 ? 'Tomorrow'
+      : days > 0 ? `in ${days} days`
+      : `${-days} days ago`;
+
+    card.innerHTML = `
+      <div class="event-header">
+        <span class="event-emoji">${ev.emoji}</span>
+        <span class="event-name">${ev.name}</span>
+        <span class="event-badge ${badgeClass(ev.type)}">${badgeLabel(ev.type)}</span>
+        <span class="event-date">${formatDate(ev.peak)}</span>
+      </div>
+      ${ev.window !== ev.peak.slice(0,10) && ev.window ? `<div class="event-visibility">📅 ${ev.window}</div>` : ''}
+      <div class="event-desc">${ev.desc}</div>
+      ${ev.zhr ? `<div class="event-visibility">Peak rate: ~${ev.zhr} meteors/hr · Radiant: ${ev.radiant}</div>` : ''}
+      ${ev.visibility ? `<div class="event-visibility">🌐 ${ev.visibility}</div>` : ''}
+      ${!isPast ? `<div class="event-visibility" style="color:rgba(255,200,80,0.7);margin-top:0.3rem">${countdown}</div>` : ''}
+    `;
+    return card;
+  }
+
+  if (upcoming.length) {
+    const hdr = document.createElement('div');
+    hdr.className = 'event-section-header';
+    hdr.textContent = 'UPCOMING';
+    container.appendChild(hdr);
+    upcoming.forEach(ev => container.appendChild(makeCard(ev)));
+  }
+  if (past.length) {
+    const hdr = document.createElement('div');
+    hdr.className = 'event-section-header';
+    hdr.textContent = 'PAST EVENTS';
+    container.appendChild(hdr);
+    past.forEach(ev => container.appendChild(makeCard(ev)));
+  }
+}
+
 (async () => {
   // Load all data in parallel
-  const [pArr, brightArr, constArr, messierArr] = await Promise.all([
+  const [pArr, brightArr, constArr, messierArr, eventsArr] = await Promise.all([
     fetch('/api/planets').then(r => r.json()),
     fetch('/api/bright-stars').then(r => r.json()),
     fetch('/api/constellations').then(r => r.json()),
     fetch('/api/messier').then(r => r.json()),
+    fetch('/api/events').then(r => r.json()).catch(() => []),
   ]);
   PLANET_DATA  = Object.fromEntries(pArr.map(p => [p.id, p]));
   BRIGHT_STARS = brightArr;
   CONST_LINES  = constArr;
   MESSIER      = messierArr;
+  if (eventsArr.length) EVENTS_DATA = eventsArr;
 
   await loadNamedStars();
   animate();

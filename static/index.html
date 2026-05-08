@@ -8,6 +8,17 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/style.css" />
+
+  <!-- ─── Google Analytics ───────────────────────────────────── -->
+  <!-- Replace G-XXXXXXXXXX with your GA4 Measurement ID         -->
+  <!-- Get one free at analytics.google.com → Create Property    -->
+  <!-- <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-XXXXXXXXXX');
+  </script> -->
 </head>
 <body>
   <div id="loading-screen">
@@ -25,9 +36,15 @@
     <p>Click any star or planet for detailed information.<br>Named stars show when their light left Earth.</p>
   </div>
 
-  <button id="apod-trigger" title="NASA Astronomy Picture of the Day">
-    🌌 <span class="apod-label">APOD</span>
-  </button>
+  <!-- ─── Top-right buttons ─────────────────────────────────── -->
+  <div id="top-buttons">
+    <button id="events-trigger" title="Upcoming Astronomical Events">
+      🗓 <span class="btn-label">Events</span>
+    </button>
+    <button id="apod-trigger" title="NASA Astronomy Picture of the Day">
+      🌌 <span class="apod-label">APOD</span>
+    </button>
+  </div>
 
   <!-- ─── APOD Overlay ──────────────────────────────────────── -->
   <div id="apod-overlay" class="hidden">
@@ -39,6 +56,15 @@
       <img id="apod-image" alt="" />
       <div id="apod-explanation-display"></div>
       <div id="apod-copyright-display"></div>
+    </div>
+  </div>
+
+  <!-- ─── Events Overlay ────────────────────────────────────── -->
+  <div id="events-overlay" class="hidden">
+    <div id="events-content">
+      <button id="events-close">✕</button>
+      <div class="panel-label">UPCOMING ASTRONOMICAL EVENTS</div>
+      <div id="events-list"></div>
     </div>
   </div>
 
@@ -176,7 +202,13 @@
       <button id="sky-back-btn">← Globe</button>
       <div id="sky-title-group">
         <div id="sky-location-name"></div>
-        <div id="sky-time-display"></div>
+        <div id="sky-time-row">
+          <div id="sky-time-display" title="Click to time-travel"></div>
+          <div id="sky-time-travel-row" class="hidden">
+            <input type="datetime-local" id="sky-time-input" />
+            <button id="sky-live-btn">◉ Live</button>
+          </div>
+        </div>
       </div>
       <div id="sky-filters">
         <button class="sky-filter-btn active" data-filter="named"   title="Named bright stars">⊙ Named</button>
